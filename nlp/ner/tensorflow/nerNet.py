@@ -188,7 +188,7 @@ class NERNet:
                     if datautil.use_for_bert == True:
                         #get bert data
                         batch_tokens,batch_input_ids,batch_input_mask,batch_segment_ids,batch_labels_index,\
-                        actual_lengths = datautil.ner_bert_data_convert(batch_data, batch_label, tokenizer)
+                        actual_lengths = datautil.ner_bert_data_convert(batch_data, tokenizer, batch_label)
                         feed = {
                             self.input_ids:batch_input_ids,
                             self.input_mask:batch_input_mask,
@@ -229,7 +229,7 @@ class NERNet:
                             if datautil.use_for_bert == True:
                                 #get bert data
                                 batch_tokens,batch_input_ids,batch_input_mask,batch_segment_ids,batch_labels_index,\
-                                actual_lengths = datautil.ner_bert_data_convert(batch_data, batch_label, tokenizer)
+                                actual_lengths = datautil.ner_bert_data_convert(batch_data, tokenizer, batch_label)
                                 feed = {
                                     self.input_ids:batch_input_ids,
                                     self.input_mask:batch_input_mask,
@@ -311,7 +311,7 @@ class NERNet:
                                                data_y=test_label,position=position, shuffle=False)
                 if datautil.use_for_bert:
                     batch_tokens,batch_input_ids,batch_input_mask,batch_segment_ids,batch_labels_index,\
-                    actual_lengths = datautil.ner_bert_data_convert(batch_data,batch_label, tokenizer=self.tokenizer)
+                    actual_lengths = datautil.ner_bert_data_convert(batch_data, self.tokenizer, batch_label)
                     feed = {
                         self.input_ids:batch_input_ids,
                         self.input_mask:batch_input_mask,

@@ -137,7 +137,7 @@ class NLPDataUtil:
         actual_lengths = []
         for i in range(len(batch_data)):
             tokens,input_ids,input_mask,segment_ids,\
-            labels = convert_single_sample(batch_data[i], batch_label[i], tokenizer)
+            labels = convert_single_sample(batch_data[i], tokenizer, batch_label[i])
             if len(input_ids)>max_len:
                 max_len = len(input_ids)
             actual_lengths.append(len(input_ids))

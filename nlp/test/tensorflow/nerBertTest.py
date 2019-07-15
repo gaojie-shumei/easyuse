@@ -70,7 +70,7 @@ def train(data,label,train_num,learn_rate,batch_size):
                                                position=0, shuffle=False)
     #get bert data
     v_tokens,v_input_ids,v_input_mask,v_segment_ids,v_labels_index,\
-    v_lengths = datautil.ner_bert_data_convert(v_data, v_label, tokenizer)
+    v_lengths = datautil.ner_bert_data_convert(v_data, tokenizer, v_label)
     
     #get validation data end
     
@@ -94,7 +94,7 @@ def train(data,label,train_num,learn_rate,batch_size):
                                                position=position, shuffle=True)
                 #get bert data
                 batch_tokens,batch_input_ids,batch_input_mask,batch_segment_ids,batch_labels_index,\
-                actual_lengths = datautil.ner_bert_data_convert(batch_data, batch_label, tokenizer)
+                actual_lengths = datautil.ner_bert_data_convert(batch_data, tokenizer, batch_label)
                 
                 feed = {input_ids:batch_input_ids,input_mask:batch_input_mask,segment_ids:batch_segment_ids,
                              y:batch_labels_index}
