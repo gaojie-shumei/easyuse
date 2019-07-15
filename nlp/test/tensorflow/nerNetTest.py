@@ -67,13 +67,13 @@ nernet.create_NERModel_based_bert(
     regularizer_fn=regularizer_fn
 )
 print("\ntrain\n")
-nernet.train(data, label, train_num=100, learn_rate=2e-5, batch_size=32,v_data=v_data,v_label=v_label,
-             model_fn_placeholder_feed_tr={"istrain":True},model_fn_placeholder_feed_pre={"istrain":False},step_for_show=2)
+# nernet.train(data, label, train_num=100, learn_rate=2e-5, batch_size=128,v_data=v_data,v_label=v_label,
+#              model_fn_placeholder_feed_tr={"istrain":True},model_fn_placeholder_feed_pre={"istrain":False},step_for_show=10)
 
 print("\ntest\n")
-nernet.test(t_data, t_label, batch_size=32, model_fn_placeholder_feed_pre={"istrain":False})
+# nernet.test(t_data, t_label, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False})
 
-t_data,predict_labels = nernet.predict(t_data, batch_size=32, model_fn_placeholder_feed_pre={"istrain":False})
+t_data,predict_labels = nernet.predictNER(t_data, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False})
 
 print("\npredict\n")
 print(t_data[0])

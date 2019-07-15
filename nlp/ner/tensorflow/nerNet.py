@@ -348,7 +348,7 @@ class NERNet:
             return P,R,F,acc
         pass
 
-    def predict(self,test_data:list,batch_size,model_fn_placeholder_feed_pre:dict=None):
+    def predictNER(self,test_data:list,batch_size,model_fn_placeholder_feed_pre:dict=None):
         '''
         :test_data: the test data, a two dim list
         :batch_size: batch size
@@ -394,7 +394,7 @@ class NERNet:
                             feed.update({self.model_fn_placeholders[key]:model_fn_placeholder_feed_pre[key]})
                 predict_tags = sess.run(self.predict,feed_dict=feed)
                 predict_label = datautil.index2label(predict_tags, actual_lengths)
-                predict_labels.append(predict_label)
+                predict_labels = predict_labels + predict_label
         return test_data,predict_labels
 #         pass
 
