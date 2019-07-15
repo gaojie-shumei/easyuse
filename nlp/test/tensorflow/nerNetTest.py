@@ -35,6 +35,10 @@ t_data,t_data_pos_tag,t_data_chunk_tag,t_label,t_position,t_label_index = read_d
 
 datautil = nlpDataUtil.NLPDataUtil(use_for_bert=True, label_setlist=label_index)
 
+
+'''
+in git the bert base model is not exist,you should download it on network
+'''
 bert_based_model_dir = "../../bert/base_model/cased_L-12_H-768_A-12"
 
 #bert model paramers set   placeholder

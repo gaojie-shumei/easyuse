@@ -20,7 +20,9 @@ datautil = nlpDataUtil.NLPDataUtil(use_for_bert=True, label_setlist=label_index)
 
 output_size = len(datautil.label_setlist)
 
-
+'''
+in git the bert base model is not exist,you should download it on network
+'''
 bert_based_model_dir = "../../bert/base_model/cased_L-12_H-768_A-12"
 
 #bert model paramers set   placeholder
