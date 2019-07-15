@@ -1,0 +1,26 @@
+from datautil import nlpDataUtil
+a = "1234567890"
+b = "0987654321"
+a = list(a)
+b = list(b)
+print(a)
+print(b)
+print("!"*33)
+datautil = nlpDataUtil.NLPDataUtil()
+a,_,batch_a,_,_ = datautil.next_batch(3,a,random_state=1)
+b,_,batch_b,_,_ = datautil.next_batch(3,b,random_state=1)
+print(batch_a)
+print(batch_b)
+print("!"*33)
+print(a)
+print(b)
+print("!"*33)
+
+a,_,batch_a,_,_ = datautil.next_batch(3,a,random_state=1,position=3)
+b,_,batch_b,_,_ = datautil.next_batch(3,b,random_state=1,position=3)
+print(batch_a)
+print(batch_b)
+print("!"*33)
+print(a)
+print(b)
+print("!"*33)
