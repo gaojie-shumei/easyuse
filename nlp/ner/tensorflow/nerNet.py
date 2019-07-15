@@ -155,10 +155,11 @@ class NERNet:
         :optimizer_params: your custom optimizer function paramters except learn rate,a dict
         :step_for_show: how many step to show the train answer
         '''
-        if optimizer is not None:
-            train = optimizer(learning_rate = learn_rate,**optimizer_params).minimize(self.loss)
-        else:
-            train = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(self.loss)
+        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+            if optimizer is not None:
+                train = optimizer(learning_rate = learn_rate,**optimizer_params).minimize(self.loss)
+            else:
+                train = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(self.loss)
         init = tf.global_variables_initializer()
         
         with tf.Session(config=self.sessionConfig) as sess:
