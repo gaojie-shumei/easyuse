@@ -90,8 +90,8 @@ class NLPDataUtil:
         actual_lengths = np.array(actual_lengths)
         return pad_data, pad_y_data, actual_lengths
     
-    def ner_bert_data_convert(self,batch_data:list,batch_label:list=None,
-                              tokenizer:tokenization.FullTokenizer):
+    def ner_bert_data_convert(self,batch_data:list,tokenizer:tokenization.FullTokenizer,
+                              batch_label:list=None):
         '''
         :batch_data: a two dim list,if English,then the data is splited by space,
                      if Chinese,the list is a char list
@@ -99,7 +99,7 @@ class NLPDataUtil:
         :tokenizer: the bert spliter for the word embedding,it maybe split a word into 
                     multi-word. such as 'unexpected' maybe split to 'un##','expect','##ed'  
         '''
-        def convert_single_sample(sample:list,label:list=None,tokenizer:tokenization.FullTokenizer):
+        def convert_single_sample(sample:list,tokenizer:tokenization.FullTokenizer,label:list=None):
             '''
             :sample: a one dim list,one of batch_data
             :label: a one dim list, one of batch_label
