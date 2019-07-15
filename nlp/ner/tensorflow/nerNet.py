@@ -15,6 +15,8 @@ import os.path as ospath
 class NERNet:
     '''
     the ner label mode should be BIO or IOB or BIOES
+    if yourself model function is complex, I recommend you extend this class and overwrite the create_NERModel function or
+     create_NERModel_based_bert function to fit your own model
     '''
     def __init__(self,datautil:NLPDataUtil,y,actual_lengths_tensor,use_crf=True,tokenizer:tokenization.FullTokenizer=None,
                  bert_base_model_path=None,sessionConfig:tf.ConfigProto=None,checkpoint=None):
