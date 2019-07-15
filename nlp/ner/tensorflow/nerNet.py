@@ -177,6 +177,7 @@ class NERNet:
                 tokenizer = self.tokenizer
             step = 0
             max_F = 0
+            print(self.entitylist)
             for i in range(train_num):
                 position = 0
                 while(position<len(data)):
@@ -477,7 +478,7 @@ class NERNet:
                 if label=="S":
                     entityset.add(label)
             else:
-                if label not in [pad_word,"[CLS]","[SEP]","X"]:
+                if label not in [pad_word,"[CLS]","[SEP]","[X]"]:
                     entityset.add(label[1:])
         entitylist = list(entityset)
         entitylist.sort()
