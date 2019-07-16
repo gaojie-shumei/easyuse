@@ -30,7 +30,7 @@ class BertForTensorFlow:
         self.scope = scope
         self.bert_model = None
     
-    def create_bert_model(self)->modeling.BertModel:
+    def create_bert_model(self):
         model = modeling.BertModel(
             config=self.bert_config,
             is_training=self.bert_is_train,
