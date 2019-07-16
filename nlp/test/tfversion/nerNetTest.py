@@ -3,7 +3,7 @@ Created on 2019年7月12日
 
 @author: gaojiexcq
 '''
-from nlp.ner.tensorflow import nerNet
+from nlp.ner.tfversion import nerNet
 from datautil import nlpDataUtil
 from nlp.test.read_data_for_conll2003 import *
 import tensorflow as tf
