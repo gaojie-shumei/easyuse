@@ -11,7 +11,7 @@ class BertForTensorFlow:
     the word embedding can get in bert model
     '''
     def __init__(self,bert_config:modeling.BertConfig,bert_is_train:bool,input_ids,
-                 input_mask=None,segment_ids=None,use_one_hot_embeddings:bool=False):
+                 input_mask=None,segment_ids=None,use_one_hot_embeddings:bool=False,scope=None):
         '''
         :bert_config: bert config file, not clear yet
         :bert_is_train: train or not train
@@ -19,6 +19,7 @@ class BertForTensorFlow:
         :input_mask: if the position has word,it is 1,else 0
         :segment_ids: if it is the sample's first sentence then 0,the second then 1,max is second
         :use_one_hot_embedding: use or not use
+        :scope: the bert model scope
         '''
         self.bert_config = bert_config
         self.bert_is_train = bert_is_train
@@ -26,18 +27,20 @@ class BertForTensorFlow:
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.use_one_hot_embeddings = use_one_hot_embeddings
+        self.scope = scope
         self.bert_model = None
     
-    def create_bert_model(self):
+    def create_bert_model(self)->modeling.BertModel:
         model = modeling.BertModel(
             config=self.bert_config,
             is_training=self.bert_is_train,
             input_ids=self.input_ids,
             input_mask=self.input_mask,
             token_type_ids=self.segment_ids,
-            use_one_hot_embeddings=self.use_one_hot_embeddings)
+            use_one_hot_embeddings=self.use_one_hot_embeddings,
+            scope=self.scope)
         self.bert_model = model
-        restore_vars = tf.global_variables()
+        restore_vars = tf.global_variables(self.scope)
         return model,restore_vars
     
     def load_bert_pretrained_model(self,sess:tf.Session,model_path:str,restore_vars:list):

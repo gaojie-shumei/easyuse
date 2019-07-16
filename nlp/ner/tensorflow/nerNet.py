@@ -15,8 +15,6 @@ import os.path as ospath
 class NERNet:
     '''
     the ner label mode should be BIO or IOB or BIOES
-    if yourself model function is complex, I recommend you extend this class and overwrite the create_NERModel function or
-     create_NERModel_based_bert function to fit your own model
     '''
     def __init__(self,datautil:NLPDataUtil,y,actual_lengths_tensor,use_crf=True,tokenizer:tokenization.FullTokenizer=None,
                  bert_base_model_path=None,sessionConfig:tf.ConfigProto=None,checkpoint=None):
@@ -106,7 +104,7 @@ class NERNet:
     def create_NERModel_based_bert(self,bert_config:modeling.BertConfig,bert_is_train:bool,
                                    input_ids,input_mask,segment_ids,
                                    use_one_hot_embeddings:bool=False,model_fn=None,model_fn_params:dict=None,
-                                   model_fn_placeholders:dict=None,regularizer_fn=None):
+                                   model_fn_placeholders:dict=None,regularizer_fn=None,scope=None):
         '''
         :bert_config: bert config file, not clear yet
         :bert_is_train: train or not train
@@ -118,13 +116,14 @@ class NERNet:
         :model_fn_params: your own  model function's paramters include all placeholder used,it should privide with dict
         :model_fn_placeholders: the placeholder use for your own model function
         :regularizer_fn:   a regularizer function,usually use tf.contrib.layers.l2_regularizer(scale)
+        :scope: the bert model scope
         '''
         bertfortf = bertTfApi.BertForTensorFlow(bert_config=bert_config, 
                                             bert_is_train=bert_is_train, 
                                             input_ids=input_ids, 
                                             input_mask=input_mask, 
                                             segment_ids=segment_ids, 
-                                            use_one_hot_embeddings=use_one_hot_embeddings)
+                                            use_one_hot_embeddings=use_one_hot_embeddings,scope=scope)
         model,restore_vars = bertfortf.create_bert_model()
         out = model.get_sequence_output()
         self.create_NERModel(out, model_fn, model_fn_params,model_fn_placeholders, regularizer_fn)
