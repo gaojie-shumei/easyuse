@@ -90,7 +90,7 @@ def model_fn(input,istrain,keep_prob,isbn,isln):
     
     #拼接或者相加 
     if isinstance(out, tuple):
-        outputs = tf.concat(out,axis=-1)
+        out = tf.concat(out,axis=-1)
     
     #单向LSTM 解码
     with tf.variable_scope("decoder_lstm"):
