@@ -36,19 +36,8 @@ def get_lstm_cell(num_units,use_peepholes=False,cell_clip=None,num_proj=None,pro
     cell = tcr.DropoutWrapper(cell,input_keep_prob=input_keep_prob,state_keep_prob=state_keep_prob,output_keep_prob=output_keep_prob)
     return cell
 
-def model_fn(input,istrain):
-    '''
-    :input: a tensor,shape [batch,max_len,word_embedding_size]=[None,None,word_embedding_size], usually a placeholder
-    :istrain: for batch normalization
-    '''
-    regularizer_fn = tcl.l2_regularizer(0.0001)
-    out = tf.layers.dense(input,units=128,activation=tf.nn.relu,kernel_regularizer=regularizer_fn)
-    out = tf.layers.batch_normalization(out,training=istrain)
-    cell = tf.nn.rnn_cell.MultiRNNCell([get_lstm_cell(num_units=128,forget_bias=0.5,layer_norm=True) for _ in range(2)])
-    out,_ = tf.nn.dynamic_rnn(cell, out, dtype="float")
-    return out
-istrain = tf.placeholder(dtype=tf.bool)
-model_fn_placeholders = {"istrain":istrain}
+
+
 train_path = "../../ner/data/conll2003/eng.train"
 v_path = "../../ner/data/conll2003/eng.testa"
 test_path = "../../ner/data/conll2003/eng.testb"
@@ -77,6 +66,39 @@ segment_ids = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "segment_
 y = tf.placeholder(shape=[None,None],dtype=tf.int32,name="y")
 actual_lengths_tensor = tf.placeholder(shape=[None],dtype=tf.int32,name="actual_lengths")
 
+keep_prob = tf.placeholder("float")
+istrain = tf.placeholder(dtype=tf.bool)
+model_fn_placeholders = {"istrain":istrain,"keep_prob":keep_prob}
+def model_fn(input,istrain,keep_prob,isbn,isln):
+    '''
+    :input: a tensor,shape [batch,max_len,word_embedding_size]=[None,None,word_embedding_size], usually a placeholder
+    :istrain: for batch normalization
+    '''
+    regularizer_fn = tcl.l2_regularizer(0.0001)
+    #bn
+    if isbn:
+        out = tf.layers.batch_normalization(input,training=istrain)
+    else:
+        out = tf.identity(input)
+    #BiLSTM  编码
+    with tf.variable_scope("encoder_lstm"):
+        fw_cell = tf.nn.rnn_cell.MultiRNNCell([get_lstm_cell(128, use_peepholes=True, forget_bias=0.7, layer_norm=isln, norm_gain=0.8, 
+                                                             norm_shift=1e-5, output_keep_prob=keep_prob) for _ in range(2)])
+        bw_cell = tf.nn.rnn_cell.MultiRNNCell([get_lstm_cell(128, use_peepholes=True, forget_bias=0.7, layer_norm=isln, norm_gain=0.8, 
+                                                             norm_shift=1e-5, output_keep_prob=keep_prob) for _ in range(2)])
+        out,states = tf.nn.bidirectional_dynamic_rnn(fw_cell, bw_cell, out, sequence_length=actual_lengths_tensor,dtype="float")
+    
+    #拼接或者相加 
+    if isinstance(out, tuple):
+        outputs = tf.concat(out,axis=-1)
+    
+    #单向LSTM 解码
+    with tf.variable_scope("decoder_lstm"):
+        cell = tf.nn.rnn_cell.MultiRNNCell([get_lstm_cell(512,use_peepholes=True,forget_bias=0.7,layer_norm=isln,norm_gain=0.8, 
+                                                          norm_shift=1e-5, output_keep_prob=keep_prob) for _ in range(2)])
+        out,states = tf.nn.dynamic_rnn(cell,out,sequence_length=actual_lengths_tensor,dtype="float")
+    return out
+
 tokenizer = tokenization.FullTokenizer(vocab_file=bert_based_model_dir+"/vocab.txt",do_lower_case=False)
 
 nernet = nerNet.NERNet(datautil=datautil,y=y,actual_lengths_tensor=actual_lengths_tensor,use_crf=True,tokenizer=tokenizer,
@@ -91,18 +113,18 @@ nernet.create_NERModel_based_bert(
     segment_ids=segment_ids, 
     use_one_hot_embeddings=False, 
     model_fn=model_fn, 
-    model_fn_params={"istrain":istrain},
+    model_fn_params={"istrain":istrain,"keep_prob":keep_prob,"isbn":True,"isln":True},
     model_fn_placeholders= model_fn_placeholders,
     regularizer_fn=regularizer_fn
 )
 print("\ntrain\n")
 nernet.train(data, label, train_num=100, learn_rate=2e-5, batch_size=128,v_data=v_data,v_label=v_label,
-             model_fn_placeholder_feed_tr={"istrain":True},model_fn_placeholder_feed_pre={"istrain":False},step_for_show=10)
+             model_fn_placeholder_feed_tr={"istrain":True,"keep_prob":0.5},model_fn_placeholder_feed_pre={"istrain":False,"keep_prob":1},step_for_show=10)
 
 print("\ntest\n")
-nernet.test(t_data, t_label, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False})
+nernet.test(t_data, t_label, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False,"keep_prob":1})
 
-t_data,predict_labels = nernet.predictNER(t_data, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False})
+t_data,predict_labels = nernet.predictNER(t_data, batch_size=128, model_fn_placeholder_feed_pre={"istrain":False,"keep_prob":1})
 
 print("\npredict\n")
 print(t_data[0])
