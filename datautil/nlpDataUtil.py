@@ -6,7 +6,7 @@ import os.path as ospath
 import os
 from bert import tokenization
 class NLPDataUtil:
-    def __init__(self,use_for_bert=False,label_setlist:list=None, pad_word="<pad>",word2vec_path="word2vecmodel/",word2vec_model:[dict]=None, **word2vec_params):
+    def __init__(self,use_for_bert=False,label_setlist:list=None, pad_word="<pad>",word2vec_path="./word2vecmodel",word2vec_model:[dict]=None, **word2vec_params):
         '''
         :use_for_bert: use this to generate data can feed to bert model
         :label_setlist: the ner label or classfication(the number needed same to index)
@@ -228,9 +228,16 @@ class NLPDataUtil:
                     batch_y.append(np.array(y))
             batch_x = np.array(batch_x)
             if batch_y is not None:
-                batch_y = np.array(batch_y)
+                batch_y = np.array(batch_y).astype(np.int32)
         return batch_x,batch_y
 
+    def set_mask(self,batch_x:np.ndarray,actual_lengths:np.ndarray=None,mask=0):
+        if actual_lengths is None:
+            return batch_x
+        else:
+            for i in range(actual_lengths.shape[0]):
+                batch_x[:,actual_lengths[i]:,:] = mask
+        return batch_x
     '''
     sentences：可以是一个·ist，对于大语料集，建议使用BrownCorpus,Text8Corpus或·ineSentence构建。
     ·  sg： 用于设置训练算法，默认为0，对应CBOW算法；sg=1则采用skip-gram算法。
@@ -252,7 +259,7 @@ class NLPDataUtil:
     ·  batch_words：每一批的传递给线程的单词的数量，默认为10000
     '''
     def word2vec(self, sentences=None, size=128, alpha=0.025, window=5, min_count=5,max_vocab_size=None, sample=1e-3,
-                 seed=1, workers=3, min_alpha=0.0001,sg=0, hs=0, negative=5, cbow_mean=1, iter=5):
+                 seed=1, workers=3, min_alpha=0.0001,sg=0, hs=0, negative=5, cbow_mean=1, iter=5,name="data.model"):
         if sentences is not None:
             if isinstance(sentences,list)==False:
                 sentences = list(sentences)
@@ -314,6 +321,6 @@ class NLPDataUtil:
         if self.word2vec_path is not None and self.word2vec_path!="":
             if ospath.exists(self.word2vec_path)==False:
                 os.mkdir(self.word2vec_path)
-            model.save(self.word2vec_path)
+            model.save(self.word2vec_path+"/"+name)
         self.word2vec_model = model
         return model
