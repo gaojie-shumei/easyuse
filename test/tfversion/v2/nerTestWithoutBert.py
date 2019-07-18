@@ -52,18 +52,18 @@ def create_model():
     output = crf_layer(output)
 
     model = tf.keras.Model(inputs=input, outputs=output)
-    # model.compile(optimizer="adam", loss=kcloss.crf_loss,
-    #               metrics=[kcm.crf_accuracy])
+    model.compile(optimizer="adam", loss=kcloss.crf_loss,
+                  metrics=[kcm.crf_accuracy])
     model.summary()
     return model
 
 def main():
     model = create_model()
     # import tensorflow_addons as tfa
-    # batch_size = 128
-    # steps_per_epoch = len(data)//batch_size + 0 if len(data)%batch_size==0 else 1
-    # history = model.fit_generator(generator=generate_batch_data_for_keras(data,label,datautil,batch_size),
-    #                               steps_per_epoch=steps_per_epoch,epochs=100)
+    batch_size = 128
+    steps_per_epoch = len(data)//batch_size + 0 if len(data)%batch_size==0 else 1
+    history = model.fit_generator(generator=generate_batch_data_for_keras(data,label,datautil,batch_size),
+                                  steps_per_epoch=steps_per_epoch,epochs=100)
     import matplotlib.pyplot as plt
     plt.plot(history.history['acc'])
     plt.show()
