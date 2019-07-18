@@ -1,2 +1,2 @@
 some code for clawer and nlp deep learning
-tensorflow 2.0 not support
+keras-contrib.layers.crf.CRF api has bug for tf2.0 when using tf.keras.* build the model
