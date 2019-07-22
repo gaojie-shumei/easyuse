@@ -20,6 +20,7 @@ class SingleClassification:
         self.bert_model = None
 
     def createmodel(self, *args, **kwargs):
+        print(args)
         '''
         :param args:
             if len(args)==7   顺序固定如下
@@ -47,6 +48,7 @@ class SingleClassification:
         else:
             istrain = False
         if len(args)==7:
+            print("7777777777777777777777")
             bert_config = args[0]
             bert_is_train = args[1]
             input_ids = args[2]
@@ -68,7 +70,7 @@ class SingleClassification:
             input = args[0]
             # istrain = args[1]
             keep_prob = args[1]
-            actual_lengths_tensor = args[3]
+            actual_lengths_tensor = args[2]
             fcell = tf.nn.rnn_cell.MultiRNNCell([self.__get_lstm_cell(256, forget_bias=0.8,
                                                                       output_keep_prob=keep_prob)
                                                  for _ in range(2)])
@@ -83,7 +85,7 @@ class SingleClassification:
             output = tf.keras.layers.BatchNormalization(trainable=istrain)(output)
         output = self.fc1(output)
         output = self.fc2(output)
-        output = tf.nn.dropout(keep_prob=keep_prob)
+        output = tf.nn.dropout(output,keep_prob=keep_prob)
         output = self.softmax(output)
         return output
 
@@ -114,7 +116,9 @@ class SingleClassification:
         return cell
 
     def __call__(self, *args, **kwargs):
-        self.createmodel(args,kwargs)
+        print(args)
+        print()
+        self.createmodel(*args,**kwargs)
 
 #bert model paramers set   placeholder
 input_ids = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "input_ids")
@@ -132,7 +136,7 @@ def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         train = optimizer.minimize(loss)
-    saver = tf.train.saver(singleclass.restore_vars)
+    saver = tf.train.Saver(singleclass.restore_vars)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         saver.restore(sess,bert_base_model_dir+"/bert_model.ckpt")
