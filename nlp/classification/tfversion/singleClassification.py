@@ -1,5 +1,5 @@
 # from datautil import nlpDataUtil
-from nlp.bert.tfversion import bertTfApi
+from nlp.bertapi.tfversion import bertTfApi
 from bert import modeling
 from bert import tokenization
 import tensorflow as tf
@@ -17,6 +17,7 @@ class SingleClassification:
                                              kernel_regularizer=self.regularizer)
         self.bertfortf = None
         self.restore_vars = None
+        self.bert_model = None
 
     def createmodel(self, *args, **kwargs):
         '''
@@ -54,10 +55,13 @@ class SingleClassification:
             bert_name = args[5]
             # istrain = args[6]
             keep_prob = args[6]
-            bertfortf = bertTfApi.BertForTensorFlow(bert_config, bert_is_train, input_ids, input_mask,
-                                                    segment_ids, scope=bert_name)
-            self.bertfortf = bertfortf
-            model,restore_vars = bertfortf.create_bert_model()
+            # bertfortf = bertTfApi.BertForTensorFlow(bert_config, bert_is_train, input_ids, input_mask,
+            #                                         segment_ids, scope=bert_name)
+            model = modeling.BertModel(bert_config,bert_is_train,input_ids,input_mask,segment_ids,False,scope=bert_name)
+            restore_vars = tf.global_variables(bert_name)
+            self.bert_model = model
+            # self.bertfortf = bertfortf
+            # model,restore_vars = bertfortf.create_bert_model()
             self.restore_vars = restore_vars
             output = model.get_pooled_output()
         else:
@@ -128,10 +132,10 @@ def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         train = optimizer.minimize(loss)
+    saver = tf.train.saver(singleclass.restore_vars)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        singleclass.bertfortf.load_bert_pretrained_model(sess,bert_base_model_dir+"/bert_model.ckpt",
-                                                         singleclass.restore_vars)
+        saver.restore(sess,bert_base_model_dir+"/bert_model.ckpt")
     step = 0
     for i in range(train_num):
         position = 0
@@ -158,7 +162,7 @@ def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
 def main():
     datapath = "../data/sub.csv"
     data,label = read_data(datapath)
-    bert_base_model_dir = "../../bert/base_model/cased_L-12_H-768_A-12"
+    bert_base_model_dir = "../../bertapi/base_model/cased_L-12_H-768_A-12"
     train_num = 100
     learning_rate = 0.0005
     batch_size = 128

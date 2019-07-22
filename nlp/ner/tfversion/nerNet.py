@@ -4,7 +4,7 @@ Created on 2019年7月12日
 @author: gaojiexcq
 '''
 import tensorflow as tf
-from nlp.bert.tensorflow import bertTfApi
+from nlp.bertapi.tfversion import bertTfApi
 from datautil.nlpDataUtil import NLPDataUtil
 from tensorflow.contrib import crf as tcc
 from bert import modeling

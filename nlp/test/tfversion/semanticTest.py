@@ -3,7 +3,7 @@ Created on 2019年7月16日
 
 @author: gaojiexcq
 '''
-from nlp.bert.tfversion import bertTfApi
+from nlp.bertapi.tfversion import bertTfApi
 from datautil import nlpDataUtil
 import tensorflow as tf
 from bert import modeling
