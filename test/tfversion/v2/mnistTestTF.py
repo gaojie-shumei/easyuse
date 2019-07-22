@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 def create_model():
-    x = tf.keras.Input(784, name="x", dtype=tf.float32)
+    x = tf.keras.Input(shape=(784,), name="x", dtype=tf.float32)
     out = tf.keras.layers.Dense(units=64, activation=tf.nn.relu, kernel_initializer="he_normal")(x)
     out = tf.keras.layers.Dense(units=32, activation=tf.nn.relu, kernel_initializer="he_normal")(out)
     out = tf.keras.layers.Dense(units=10, activation=tf.nn.softmax, kernel_initializer="he_normal")(out)
