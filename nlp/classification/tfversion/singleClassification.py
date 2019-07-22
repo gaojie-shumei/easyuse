@@ -118,7 +118,8 @@ class SingleClassification:
     def __call__(self, *args, **kwargs):
         print(args)
         print()
-        self.createmodel(*args,**kwargs)
+        output = self.createmodel(*args,**kwargs)
+        return output
 
 #bert model paramers set   placeholder
 input_ids = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "input_ids")
