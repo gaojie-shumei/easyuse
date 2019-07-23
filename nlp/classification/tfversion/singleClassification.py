@@ -1,7 +1,7 @@
 # from datautil import nlpDataUtil
 from nlp.bertapi.tfversion import bertTfApi
 from bert import modeling
-from bert import tokenization
+# from bert import tokenization
 import tensorflow as tf
 from tensorflow.contrib import rnn as tcr
 from nlp.classification.generateData import *
@@ -57,13 +57,13 @@ class SingleClassification:
             bert_name = args[5]
             # istrain = args[6]
             keep_prob = args[6]
-            # bertfortf = bertTfApi.BertForTensorFlow(bert_config, bert_is_train, input_ids, input_mask,
-            #                                         segment_ids, scope=bert_name)
-            model = modeling.BertModel(bert_config,bert_is_train,input_ids,input_mask,segment_ids,False,scope=bert_name)
-            restore_vars = tf.global_variables(bert_name)
-            self.bert_model = model
-            # self.bertfortf = bertfortf
-            # model,restore_vars = bertfortf.create_bert_model()
+            bertfortf = bertTfApi.BertForTensorFlow(bert_config, bert_is_train, input_ids, input_mask,
+                                                    segment_ids, scope=bert_name)
+            # model = modeling.BertModel(bert_config,bert_is_train,input_ids,input_mask,segment_ids,False,scope=bert_name)
+            # restore_vars = tf.global_variables(bert_name)
+            # self.bert_model = model
+            self.bertfortf = bertfortf
+            model, restore_vars = bertfortf.create_bert_model()
             self.restore_vars = restore_vars
             output = model.get_pooled_output()
         else:
@@ -137,32 +137,33 @@ def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         train = optimizer.minimize(loss)
-    saver = tf.train.Saver(singleclass.restore_vars)
+    # saver = tf.train.Saver(singleclass.restore_vars)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess,bert_base_model_dir+"/bert_model.ckpt")
-    step = 0
-    for i in range(train_num):
-        position = 0
-        while(position<len(data)):
-            data,label,batch_data,batch_label,position = next_batch(batch_size,data,label,position)
-            batch_input_ids,batch_input_mask,batch_segment_ids,_=convert_batch_data(batch_data,tokenizer)
-            sess.run(train,feed_dict = {
-                input_ids:batch_input_ids,
-                input_mask:batch_input_mask,
-                segment_ids:batch_segment_ids,
-                keep_prob:0.5,
-                y:batch_label
-            })
-            if step%100==0:
-                print(sess.run([loss,accuracy],feed_dict={
+        # saver.restore(sess,bert_base_model_dir+"/bert_model.ckpt")
+        singleclass.bertfortf.load_bert_pretrained_model(sess,bert_base_model_dir+"/bert_model.ckpt",singleclass.restore_vars)
+        step = 0
+        for i in range(train_num):
+            position = 0
+            while(position<len(data)):
+                data,label,batch_data,batch_label,position = next_batch(batch_size,data,label,position)
+                batch_input_ids,batch_input_mask,batch_segment_ids,_=convert_batch_data(batch_data,tokenizer)
+                sess.run(train,feed_dict = {
                     input_ids:batch_input_ids,
                     input_mask:batch_input_mask,
                     segment_ids:batch_segment_ids,
                     keep_prob:0.5,
                     y:batch_label
-                }))
-            step += 1
+                })
+                if step%100==0:
+                    print(sess.run([loss,accuracy],feed_dict={
+                        input_ids:batch_input_ids,
+                        input_mask:batch_input_mask,
+                        segment_ids:batch_segment_ids,
+                        keep_prob:0.5,
+                        y:batch_label
+                    }))
+                step += 1
 
 def main():
     datapath = "../data/sub.csv"
