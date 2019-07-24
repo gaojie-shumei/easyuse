@@ -18,14 +18,17 @@ def get_all_file(base_dir,filenamelike=None,filetype=None,uncased=False):
     flist = os.listdir(base_dir)
     filepathlist = []
     for filename in flist:
-        if ospath.isdir(ospath.join(base_dir,filename)):
-            filepathlist = filepathlist + get_all_file(ospath.join(base_dir,filename),filenamelike,filetype,uncased)
+        if ospath.isdir(ospath.join(base_dir, filename)):
+            filepathlist = filepathlist + get_all_file(ospath.join(base_dir, filename), filenamelike, filetype, uncased)
         else:
             splitname= filename.rsplit(sep=".", maxsplit=1)
             if uncased:
                 try:
                     splitname[0] = splitname[0].lower()
-                    splitname[1] = splitname[1].lower()
+                    if len(splitname)>1:
+                        splitname[1] = splitname[1].lower()
+                    else:
+                        filetype = None
                 except:
                     print("Error  :"+ospath.join(base_dir,filename))
                 filenamelike = filenamelike.lower()
@@ -89,19 +92,36 @@ def extract_data(info_list,key_value_split_pattern=":",value_split_pattern=",",e
     return info_list
 
 
-def restore_data(info_list, jsonpath, processjson_info_path, depreated_text="DirtyDeedsDoneDirtCheap"):
+def classification_data_info_store(info_list, jsonpath, processjson_info_path, depreated_text="DirtyDeedsDoneDirtCheap"):
     # data = pd.DataFrame(columns=['annotation_approver','annotations','id','meta','text'])
     all_data = pd.DataFrame(columns=['id', 'text', 'label'])
     for info in info_list:
         try:
             df = pd.read_json(info["classification_path"], orient='records', encoding='utf-8', lines=True)
         except KeyError as ex:
-            print("Error ", ex, "     ", info["readme_path"])
+            print("Error:", ex, "     ", info["readme_path"])
         # new_data = pd.concat([data, df], axis=0, ignore_index=True)
         """提取id,label,text三列"""
-        df['label'] = df[df['annotations'].map(lambda x: len(x) > 0)]['annotations'].map(lambda x: x[0]['label'])
+        # try:
         columns = ['id', 'text', 'label']
-        df = df[columns]
+        dfdata = np.array(df[["id", "text", "annotations"]])
+        dflabel = []
+        for i in range(dfdata.shape[0]):
+            try:
+                if len(dfdata[i,2])>0:
+                    dflabel.append(dfdata[i, 2][0]["label"])
+                else:
+                    dflabel.append(-1)
+            except:
+                print("Error:id=", dfdata[i, 0], ",info=", info)
+                dflabel.append(-1)
+        dflabel = np.array(dflabel)
+        df = pd.DataFrame(np.c_[dfdata[:, 0:2], dflabel], columns=columns)
+        # df['label'] = df[df['annotations'].map(lambda x: len(x) > 0)]['annotations'].map(lambda x: x[0]['label'])
+        # except:
+        #     print("Error:", info)
+
+        # df = df[columns]
         df["label"] = df["label"].fillna(-1)  # 需要重新赋值数据才能更改
         label_to = {}
         try:
@@ -112,20 +132,15 @@ def restore_data(info_list, jsonpath, processjson_info_path, depreated_text="Dir
             for negetive_and_material in info["negative and material"]:
                 label_to[negetive_and_material] = 2
         except KeyError as e:
-            print("Error  ", e, "    ", info)
+            print("Error:", e, "    ", info)
 #         print(info["not negative"],info["negative but not material"],info["negetive and material"],label_to)
 #         print(df.columns)
         df['label'] = df['label'].astype(np.int32)  # 恢复label为int型
         df['label'].replace(label_to, inplace=True)
-        # data = np.array(df)
-        if depreated_text is not None and  depreated_text!="":
-            df["text"].replace(depreated_text+"(:|：)*([0-9]*)", "", regex=True, inplace=True)
-        # df = pd.DataFrame(data,columns=columns)
-
         all_data = pd.concat([all_data, df], axis=0)
-        # print(all_data)
-        # break
-    # all_data.to_csv(csvpath, encoding='utf-8', index=True, header='id,text,label')
+    all_data.to_json(jsonpath, orient="records", lines=True)
+    if depreated_text is not None and depreated_text != "":
+        all_data["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
     data = np.array(all_data)
     data = np.delete(data, np.where(data[:, 1] == "")[0].reshape(-1), axis=0)
     delete_index = []
@@ -133,10 +148,8 @@ def restore_data(info_list, jsonpath, processjson_info_path, depreated_text="Dir
         if data[i,2] not in [-1, 0, 1, 2]:
             delete_index.append(i)
     data = np.delete(data, delete_index, axis=0)
-    all_data = pd.DataFrame(data,columns=columns)
-    all_data.to_json(jsonpath, orient="records", lines=True)
     labels = np.unique(data[:,2])
-    processjson_info_str = ""
+    processjson_info_str = "labels:"+str(labels)+"\n"
     for lb in labels:
         percent = np.sum(data[:, 2] == lb)/data.shape[0]
         if lb == -1:
@@ -164,7 +177,7 @@ def main():
     info_list = onebyone(readme_path_list, classfication_path_list, labeling_path_list, split_pattern=" ")
     info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
     # print(info_list)
-    all_data = restore_data(info_list, "D:/数据/classification.json", "D:/数据/processinfo.txt")
+    all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/processinfo.txt")
     data = np.array(all_data)
     print(np.unique(data[:, 2]))
     # for info in info_list:

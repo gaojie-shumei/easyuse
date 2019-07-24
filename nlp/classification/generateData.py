@@ -2,15 +2,81 @@ from bert import tokenization
 import pandas as pd
 import numpy as np
 import random
+import math
+def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", data_augmentation_label=2,test_percent=0.5,
+                             keyword_path="../data/keyword.csv")->(list, list, list):
+    '''读取classification 数据  id  text  label'''
+    df = pd.read_json(jsonPath, orient="records", encoding="utf-8", lines=True)
+    '''获取负面关键词'''
+    keyword = np.array(pd.read_csv(keyword_path)).reshape(-1)
+    '''将分隔符去除'''
+    if depreated_text is not None and depreated_text != "":
+        df["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
+    '''DataFrame to numpy  按照 id,text,label的格式来'''
+    data = np.c_[np.array(df["id"]), np.array(df["text"]), np.array(df["label"])]
+    # print("data:",data)
+    '''删除text为空的数据'''
+    data = np.delete(data, np.where(data[:, 1] == "")[0].reshape(-1), axis=0)
+    '''删除未知label数据'''
+    delete_index = []
+    for i in range(data.shape[0]):
+        if data[i, 2] not in [0, 1, 2]:
+            delete_index.append(i)
+    data = np.delete(data, delete_index, axis=0)
+    '''获取需要数据增强的类别数据'''
+    need_data_augmentation = data[data[:, 2] == data_augmentation_label]
+    print("need_data_augmentation.shape",need_data_augmentation.shape)
+    np.random.shuffle(need_data_augmentation)
+    print("need_data_augmentation.shape", need_data_augmentation.shape)
+    test_num = math.ceil(len(need_data_augmentation)*test_percent)
+    '''分割test data 和train data'''
+    test_data = need_data_augmentation[0:test_num]
+    '''数据增强的数据确定'''
+    need_data_augmentation = need_data_augmentation[test_num:]
+    print("need_data_augmentation.shape", need_data_augmentation.shape)
+    '''数据增强'''
+    data_augmentation_data = data_augmentation(need_data_augmentation, keyword, split_regex=" ")
+    '''其他类别数据'''
+    other_data = data[data[:, 2] != data_augmentation_label]
+    # print(other_data.shape,data_augmentation_data.shape)
+    '''训练数据拼接'''
+    if data_augmentation_data.shape[0]<= other_data.shape[0]:
+        data = np.r_[other_data, data_augmentation_data]
+    else:
+        data = np.r_[other_data, data_augmentation_data[0:other_data.shape[0]]]
+    '''数据打乱'''
+    np.random.shuffle(data)
+    test_text = test_data[:, 1].tolist()
+    test_label = test_data[:, 2].tolist()
+    train_text = data[:, 1].tolist()
+    train_label = data[:, 2].tolist()
+    return train_text,train_label,test_text,test_label
 
-def read_data(csvPath):
-    df = pd.read_csv(csvPath)
-    data = np.array(df)
-    label = data[:, 3].tolist()
-    data = data[:,2].tolist()
-    return data,label
+def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,split_regex = " "):
+    data = []
+    '''数据增强    1、对文本的词语顺序进行打乱增强
+                   2、在当前文本中插入负面关键词并打乱顺序增强
+    '''
+    for i in range(need_data_augmentation.shape[0]):
+        data.append(need_data_augmentation[i])
+        id = need_data_augmentation[i, 0]
+        text = need_data_augmentation[i, 1]
+        label = need_data_augmentation[i, 2]
+        textsplit = text.split(split_regex)
+        shuffle_index = random.sample(range(len(textsplit)), len(textsplit))
+        textsplit = np.array(textsplit)[shuffle_index]
+        data.append(np.array([id, " ".join(textsplit), label]))
+        for word in keyword:
+            ts = np.array(textsplit).tolist()
+            insert_index = random.randint(0, len(ts))
+            ts.insert(insert_index, word)
+            shuffle_index = random.sample(range(len(ts)), len(ts))
+            ts = np.array(ts)[shuffle_index]
+            data.append(np.array([id, " ".join(ts), label]))
+    data = np.array(data)
+    return data
 
-def next_batch(batch_size,data_x:list,data_y:list=None,position=0,shuffle=True,random_state=random.randint(0,1000)):
+def next_batch(batch_size, data_x:list, data_y:list=None, position=0, shuffle=True, random_state=random.randint(0,1000)):
     temp_data_x = data_x[position:]
     if data_y is not None:
         temp_data_y = data_y[position:]
@@ -23,7 +89,7 @@ def next_batch(batch_size,data_x:list,data_y:list=None,position=0,shuffle=True,r
     data_x = data_x[0:position] + temp_data_x
     if data_y is not None:
         data_y = data_y[0:position] + temp_data_y
-    if batch_size>=len(temp_data_x):
+    if batch_size >= len(temp_data_x):
         batch_x = temp_data_x
         if data_y is not None:
             batch_y = temp_data_y
@@ -36,7 +102,7 @@ def next_batch(batch_size,data_x:list,data_y:list=None,position=0,shuffle=True,r
         else:
             batch_y = None
     position += batch_size
-    return data_x,data_y,batch_x,batch_y,position
+    return data_x, data_y, batch_x, batch_y, position
 
 def convert_single_sample(sample: list, tokenizer: tokenization.FullTokenizer):
     '''
@@ -58,7 +124,7 @@ def convert_single_sample(sample: list, tokenizer: tokenization.FullTokenizer):
     input_mask = [1] * len(input_ids)
     actual_length = len(input_ids)
     return tokens, input_ids, input_mask, segment_ids, actual_length
-def convert_batch_data(batch_data,tokenizer:tokenization.FullTokenizer):
+def convert_batch_data(batch_data, tokenizer:tokenization.FullTokenizer,bert_max_len=512):
     batch_tokens, batch_input_ids, batch_input_mask, batch_segment_ids, actual_lengths = [], [], [], [], []
     max_len = 0
     for i in range(len(batch_data)):
@@ -71,10 +137,17 @@ def convert_batch_data(batch_data,tokenizer:tokenization.FullTokenizer):
         batch_segment_ids.append(np.array(segment_ids).tolist())
         actual_lengths.append(actual_length)
     actual_lengths = np.array(actual_lengths)
+    if max_len>bert_max_len:
+        max_len = bert_max_len
     for i in range(len(batch_data)):
-        batch_input_ids[i] = np.array(batch_input_ids[i]+[0]*(max_len-actual_lengths[i]))
-        batch_input_mask[i] = np.array(batch_input_mask[i] + [0] * (max_len - actual_lengths[i]))
-        batch_segment_ids[i] = np.array(batch_segment_ids[i]+[0]*(max_len-actual_lengths[i]))
+        if max_len-actual_lengths[i]>=0:
+            batch_input_ids[i] = np.array(batch_input_ids[i]+[0]*(max_len-actual_lengths[i]))
+            batch_input_mask[i] = np.array(batch_input_mask[i] + [0] * (max_len - actual_lengths[i]))
+            batch_segment_ids[i] = np.array(batch_segment_ids[i]+[0]*(max_len-actual_lengths[i]))
+        else:
+            batch_input_ids[i] = np.array(batch_input_ids[i][0:max_len])
+            batch_input_mask[i] = np.array(batch_input_mask[i][0:max_len])
+            batch_segment_ids[i] = np.array(batch_segment_ids[i][0:max_len])
     return batch_input_ids, batch_input_mask, batch_segment_ids, actual_lengths
 # if __name__=="__main__":
     # data, label = read_data("./data/sub.csv")

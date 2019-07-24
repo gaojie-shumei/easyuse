@@ -127,13 +127,13 @@ input_mask = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "input_mas
 segment_ids = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "segment_ids")
 y = tf.placeholder(shape=[None],dtype=tf.int32,name="y")
 keep_prob = tf.placeholder("float")
-def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
+def train(data, label, test_data, test_label, bert_base_model_dir, train_num, learning_rate, batch_size):
     tokenizer = tokenization.FullTokenizer(vocab_file=bert_base_model_dir+"/vocab.txt",do_lower_case=False)
     singleclass = SingleClassification()
     output = singleclass(modeling.BertConfig.from_json_file(bert_base_model_dir+"/bert_config.json"), True,
                          input_ids, input_mask, segment_ids, "bert", keep_prob)
-    loss = tf.losses.sparse_softmax_cross_entropy(y,output)
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(output,axis=-1,output_type=tf.int32),y),"float"))
+    loss = tf.losses.sparse_softmax_cross_entropy(y, output)
+    accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(output, axis=-1, output_type=tf.int32), y), "float"))
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         train = optimizer.minimize(loss)
@@ -146,33 +146,44 @@ def train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size):
         for i in range(train_num):
             position = 0
             while(position<len(data)):
-                data,label,batch_data,batch_label,position = next_batch(batch_size,data,label,position)
-                batch_input_ids,batch_input_mask,batch_segment_ids,_=convert_batch_data(batch_data,tokenizer)
-                sess.run(train,feed_dict = {
-                    input_ids:batch_input_ids,
-                    input_mask:batch_input_mask,
-                    segment_ids:batch_segment_ids,
-                    keep_prob:0.5,
-                    y:batch_label
+                data, label, batch_data, batch_label, position = next_batch(batch_size,data,label,position)
+                batch_input_ids, batch_input_mask, batch_segment_ids, _=convert_batch_data(batch_data, tokenizer)
+                sess.run(train, feed_dict = {
+                    input_ids: batch_input_ids,
+                    input_mask: batch_input_mask,
+                    segment_ids: batch_segment_ids,
+                    keep_prob: 0.5,
+                    y: batch_label
                 })
                 if step%100==0:
-                    print(sess.run([loss,accuracy],feed_dict={
-                        input_ids:batch_input_ids,
-                        input_mask:batch_input_mask,
-                        segment_ids:batch_segment_ids,
-                        keep_prob:0.5,
-                        y:batch_label
+                    test_input_ids, test_input_mask, test_segment_ids, _ = convert_batch_data(test_data, tokenizer)
+                    print("[train_loss,train_acc]=", sess.run([loss, accuracy], feed_dict={
+                        input_ids: batch_input_ids,
+                        input_mask: batch_input_mask,
+                        segment_ids: batch_segment_ids,
+                        keep_prob: 1,
+                        y: batch_label
+                    }), ",[test_loss,test_acc]=", sess.run([loss, accuracy], feed_dict={
+                        input_ids: test_input_ids,
+                        input_mask: test_input_mask,
+                        segment_ids: test_segment_ids,
+                        keep_prob: 1,
+                        y: test_label
                     }))
                 step += 1
 
 def main():
-    datapath = "../data/sub.csv"
-    data,label = read_data(datapath)
+    datapath = "../data/classification.json"
+    keyword_path = "../data/keyword.csv"
+    train_text, train_label, test_text, test_label = read_classification_data(datapath, depreated_text="DirtyDeedsDoneDirtCheap",
+                                                                              data_augmentation_label=2, test_percent=0.5,
+                                                                              keyword_path=keyword_path)
+    print(len(train_label), len(test_label))
     bert_base_model_dir = "../../bertapi/base_model/cased_L-12_H-768_A-12"
     train_num = 100
     learning_rate = 0.0005
     batch_size = 128
-    train(data,label,bert_base_model_dir,train_num,learning_rate,batch_size)
+    train(train_text, train_label, test_text, test_label, bert_base_model_dir, train_num, learning_rate, batch_size)
 
 if __name__ == '__main__':
     main()
