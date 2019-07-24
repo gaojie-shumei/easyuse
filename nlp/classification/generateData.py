@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 import math
-def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", data_augmentation_label=2,test_percent=0.5,
+def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", many_data_label=0, data_augmentation_label=2,test_percent=0.5,
                              keyword_path="../data/keyword.csv")->(list, list, list):
     '''读取classification 数据  id  text  label'''
     df = pd.read_json(jsonPath, orient="records", encoding="utf-8", lines=True)
@@ -28,16 +28,45 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     print("need_data_augmentation.shape",need_data_augmentation.shape)
     np.random.shuffle(need_data_augmentation)
     print("need_data_augmentation.shape", need_data_augmentation.shape)
-    test_num = math.ceil(len(need_data_augmentation)*test_percent)
-    '''分割test data 和train data'''
-    test_data = need_data_augmentation[0:test_num]
+    test_data = None
+    other_data = None
+    many_data = data[data[:, 2] == many_data_label]
+    for label in [0, 1, 2]:
+        if label !=many_data_label:
+            label_data = data[data[:, 2]==label]
+            test_num = math.ceil(label_data.shape[0]*test_percent)
+            if test_data is None:
+                test_data = label_data[0:test_num]
+            else:
+                test_data = np.r_[test_data, label_data[0:test_num]]
+            if other_data is None:
+                if label != data_augmentation_label:
+                    other_data = label_data[test_num:]
+            else:
+                if label != data_augmentation_label:
+                    other_data = np.r_[other_data,label_data[test_num:]]
+    test_num = math.ceil(many_data.shape[0]*test_percent)
+    if test_data is None:
+        test_data = many_data[0:test_num]
+        if other_data is None:
+            other_data = many_data[test_num:]
+        else:
+            other_data = np.r_[other_data,many_data[test_num:]]
+    else:
+        if other_data is None:
+            other_data = many_data[test_data.shape[0]:]
+        else:
+            other_data = np.r_[other_data, many_data[test_data.shape[0]:]]
+        test_data = np.r_[test_data, many_data[0:test_data.shape[0]]]
+
+    test_num = math.ceil(need_data_augmentation.shape[0]*test_percent)
     '''数据增强的数据确定'''
     need_data_augmentation = need_data_augmentation[test_num:]
     print("need_data_augmentation.shape", need_data_augmentation.shape)
     '''数据增强'''
     data_augmentation_data = data_augmentation(need_data_augmentation, keyword, split_regex=" ")
     '''其他类别数据'''
-    other_data = data[data[:, 2] != data_augmentation_label]
+    # other_data = data[data[:, 2] != data_augmentation_label]
     # print(other_data.shape,data_augmentation_data.shape)
     '''训练数据拼接'''
     if data_augmentation_data.shape[0]<= other_data.shape[0]:

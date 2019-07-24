@@ -13,7 +13,7 @@ class SingleClassification:
                                          kernel_regularizer=self.regularizer)
         self.fc2 = tf.keras.layers.Dense(units=128, activation=tf.nn.relu, kernel_initializer="he_normal",
                                          kernel_regularizer=self.regularizer)
-        self.softmax = tf.keras.layers.Dense(units=4, activation=tf.nn.softmax, kernel_initializer="he_normal",
+        self.softmax = tf.keras.layers.Dense(units=3, activation=tf.nn.softmax, kernel_initializer="he_normal",
                                              kernel_regularizer=self.regularizer)
         self.bertfortf = None
         self.restore_vars = None
@@ -155,7 +155,7 @@ def train(data, label, test_data, test_label, bert_base_model_dir, train_num, le
                     keep_prob: 0.5,
                     y: batch_label
                 })
-                if step%100==0:
+                if step%25==0:
                     test_input_ids, test_input_mask, test_segment_ids, _ = convert_batch_data(test_data, tokenizer)
                     print("[train_loss,train_acc]=", sess.run([loss, accuracy], feed_dict={
                         input_ids: batch_input_ids,
