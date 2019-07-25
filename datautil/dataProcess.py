@@ -301,7 +301,7 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
     for d in all_ner_data:
         if len(d[1]) > 512:
             count_max_512 += 1
-    print("count_max_512=", count_max_512)
+    # print("count_max_512=", count_max_512)
     return all_ner_data, count_max_512
 
 def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=None, whenlabels=None, wherelabels=None,
@@ -407,12 +407,13 @@ def main():
     info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
     # print(info_list)
     ## for  classification
-    # all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/classificationinfo.txt")
-    # data = np.array(all_data)
-    # print(np.unique(data[:, 2]))
+    all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/classificationinfo.txt")
+    data = np.array(all_data)
+    print("classification label=", np.unique(data[:, 2]))
 
     ##for ner
-    ner_data_info_restore(info_list, "D:/数据/ner.json", isCharSplit=False)
+    all_ner_data,count_max_512 = ner_data_info_restore(info_list, "D:/数据/ner.json", isCharSplit=False)
+    print("ner text split with space or char and count_max_512=", count_max_512)
 
 
     # for info in info_list:
