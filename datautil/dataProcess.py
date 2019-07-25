@@ -313,7 +313,7 @@ def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=No
         if need_get_entityType:
             labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
         else:
-            labelname = entity[2]
+            labelname = entity[2].lower()
         if labelname != "none":
             for i in range(start_offset,entity[0],1):
                 label.append("O")
@@ -342,7 +342,7 @@ def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=N
         if need_get_entityType:
             labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
         else:
-            labelname = entity[2]
+            labelname = entity[2].lower()
         if labelname != "none":
             try:
                 temp = text[start_offset:entity[0]]
