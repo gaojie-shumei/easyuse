@@ -138,7 +138,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
         df['label'] = df['label'].astype(np.int32)  # 恢复label为int型
         df['label'].replace(label_to, inplace=True)
         all_data = pd.concat([all_data, df], axis=0)
-    all_data.to_json(jsonpath, orient="records", lines=True)
+    all_data.to_json(jsonpath, orient="records", lines=True,force_ascii=False)
     if depreated_text is not None and depreated_text != "":
         all_data["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
     data = np.array(all_data)
@@ -167,6 +167,235 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
     return all_data
 
 
+def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
+    all_ner_data = None
+    for info in info_list:
+        '''获取readme文件中的ner标签对应数组 start'''
+        if "name" in info:
+            namelabels = info["name"]
+        elif "person name" in info:
+            namelabels = info["person name"]
+        else:
+            namelabels = []
+        if "organization" in info:
+            organizationlabels = info["organization"]
+        elif "organization name" in info:
+            organizationlabels = info["organization name"]
+        else:
+            organizationlabels = []
+        if "when" in info:
+            whenlabels = info["when"]
+        else:
+            whenlabels = []
+        if "where" in info:
+            wherelabels = info["where"]
+        else:
+            wherelabels = []
+        '''获取readme文件中的ner标签对应数组 end'''
+
+        try:
+            df = pd.read_json(info["labeling_path"],orient="records",encoding="utf-8",lines=True)
+        except:
+            print("json read Error: read info['labeling_path'] failed", info)
+            raise RuntimeError("json read Error")
+        ner_data = None
+        if "labels" in df.columns:
+            '''新版本做法'''
+            columns = ["id", "text", "labels"]
+            data = np.array(df[columns])
+            delete_index = []
+            for i in range(data.shape[0]):
+                try:
+                    if len(data[i, 2]) <= 0:
+                        delete_index.append(i)
+                except:
+                    print("labels len get Error: id=", data[i, 0], "labels=", data[i, 2], "info=", info)
+                    raise RuntimeError("labels len get Error")
+            data = np.delete(data, delete_index, axis=0)
+            for i in range(data.shape[0]):
+                id, text, entities = data[i, 0], data[i,1], data[i, 2]
+                sorted(entities, key=(lambda x: x[0]))
+                if isCharSplit:
+                    '''字符分割开始'''
+                    try:
+                        nertext,nerlabel = nerTextAndLabelForCharSplit(entities,text=text,need_get_entityType=False)
+                    except:
+                        print("nertext,label get Error: id=", id, "info=", info)
+                        raise RuntimeError("nertext,label get Error")
+                    '''字符分割结束'''
+                else:
+                    '''空格分割开始'''
+                    try:
+                        nertext,nerlabel = nerTextAndLabelForSpaceSplit(entities, text=text, need_get_entityType=False)
+                    except:
+                        print("nertext,label get Error: id=", id, "info=", info)
+                        raise RuntimeError("nertext,label get Error")
+                    '''空格分割结束'''
+                if ner_data is None:
+                    ner_data = np.array([[id, nertext, nerlabel]])
+                else:
+                    ner_data = np.r_[ner_data, np.array([[id, nertext, nerlabel]])]
+        else:
+            '''在readme里面有标签提示的做法'''
+            columns = ["id", "text", "annotations"]
+            data = np.array(df[columns])
+            delete_index = []
+            for i in range(data.shape[0]):
+                try:
+                    if len(data[i, 2]) <= 0:
+                        delete_index.append(i)
+                except:
+                    print("annotations len get Error: id=", data[i, 0], "annotations=", data[i,2], "info=", info)
+                    raise RuntimeError("annotations len get Error")
+            data = np.delete(data, delete_index, axis=0)
+            for i in range(data.shape[0]):
+                id = data[i, 0]
+                text = data[i, 1]
+                annotations = data[i, 2]
+                # namelabels, organizationlabels, whenlabels, wherelabels = [], [], [], []
+                try:
+                    entities = []
+                    '''获取标签数值及该标签在文本中的位置偏移开始与结束'''
+                    for annotation in annotations:
+                        entity = []
+                        entity.append(annotation["start_offset"])
+                        entity.append(annotation["end_offset"])
+                        entity.append(annotation["label"])
+                        entities.append(np.array(entity).tolist())
+                    sorted(entities, key=(lambda x: x[0]))
+                except:
+                    print("annotations entity get Error:id=", id, "info=", info)
+                    raise RuntimeError("annotations entity get Error")
+                if isCharSplit:
+                    '''字符分割做法开始'''
+                    try:
+                        nertext,nerlabel = nerTextAndLabelForCharSplit(entities, namelabels, organizationlabels,
+                                                                                  whenlabels,wherelabels, text)
+                    except:
+                        print("nertext,label get Error: id=", id, "info=", info)
+                        raise RuntimeError("nertext,label get Error")
+                    '''字符分割做法结束'''
+                else:
+                    '''空格分割做法开始'''
+                    try:
+                        nertext, nerlabel = nerTextAndLabelForSpaceSplit(entities, namelabels, organizationlabels, whenlabels,
+                                                                         wherelabels, text)
+                    except:
+                        print("nertext,label get Error: id=", id, "info=", info)
+                        raise RuntimeError("nertext,label get Error")
+                    '''空格分割做法结束'''
+                if ner_data is None:
+                    ner_data = np.array([[id, nertext, nerlabel]])
+                else:
+                    ner_data = np.r_[ner_data, np.array([[id, nertext, nerlabel]])]
+            # print(ner_data)
+                # break
+        if all_ner_data is None:
+            all_ner_data = ner_data
+        else:
+            all_ner_data = np.r_[all_ner_data, ner_data]
+        # break
+    all_data_df = pd.DataFrame(all_ner_data,columns=["id", "text", "label"])
+    all_data_df.to_json(jsonpath, orient="records", force_ascii=False, lines=True)
+    count_max_512 = 0
+    for d in all_ner_data:
+        if len(d[1]) > 512:
+            count_max_512 += 1
+    print("count_max_512=", count_max_512)
+    return all_ner_data, count_max_512
+
+def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=None, whenlabels=None, wherelabels=None,
+                                           text=None, need_get_entityType=True):
+    textsplit = list(text)
+    label = []
+    start_offset = 0
+    for entity in entities:
+        if need_get_entityType:
+            labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
+        else:
+            labelname = entity[2]
+        if labelname != "none":
+            for i in range(start_offset,entity[0],1):
+                label.append("O")
+            for i in range(entity[0],entity[1],1):
+                if i==entity[0]:
+                    label.append("B-"+labelname)
+                elif i<entity[1]-1:
+                    label.append("I-"+labelname)
+                else:
+                    label.append("E-"+labelname)
+        else:
+            for i in range(start_offset,entity[1],1):
+                label.append("O")
+        start_offset = entity[1]
+    while start_offset<len(text):
+        label.append("O")
+        start_offset += 1
+    return textsplit, label
+
+def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=None, whenlabels=None, wherelabels=None,
+                                           text=None, need_get_entityType=True):
+    textsplit = []
+    label = []
+    start_offset = 0
+    for entity in entities:
+        if need_get_entityType:
+            labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
+        else:
+            labelname = entity[2]
+        if labelname != "none":
+            try:
+                temp = text[start_offset:entity[0]]
+            except:
+                print("entity start offset error:entity=", entity)
+                raise RuntimeError("entity start offset error")
+            if len(temp.strip()) > 0:
+                tempsplit = temp.strip().split(" ")
+                for tmp in tempsplit:
+                    textsplit.append(tmp)
+                    label.append("O")
+            temp = text[entity[0]:entity[1]]
+            if len(temp.strip()) > 0:
+                tempsplit = temp.strip().split(" ")
+                if len(tempsplit) > 1:
+                    for i in range(len(tempsplit)):
+                        textsplit.append(tempsplit[i])
+                        if i == 0:
+                            label.append("B-" + labelname)
+                        elif i < len(tempsplit) - 1:
+                            label.append("I-" + labelname)
+                        else:
+                            label.append("E-" + labelname)
+                else:
+                    textsplit.append(tempsplit[0])
+                    label.append("S-" + labelname)
+        else:
+            tempsplit = text[start_offset:entity[1]].strip().split(" ")
+            for tmp in tempsplit:
+                textsplit.append(tmp)
+                label.append("O")
+        start_offset = entity[1]
+    if start_offset < len(text):
+        tempsplit = text[start_offset:].strip().split(" ")
+        for tmp in tempsplit:
+            textsplit.append(tmp)
+            label.append("O")
+    return textsplit, label
+
+
+def entityType(namelabels, organizationlabels, whenlabels, wherelabels, target):
+    if target in namelabels:
+        return "name"
+    elif target in organizationlabels:
+        return "organization"
+    elif target in whenlabels:
+        return "when"
+    elif target in wherelabels:
+        return "where"
+    else:
+        return "none"
+
+
 def main():
     #base_dir = "C:/Users/gaojiexcq/Desktop/数据处理/2019-7-12"
     # base_dir = "E:/text_cla/dataset"
@@ -177,9 +406,15 @@ def main():
     info_list = onebyone(readme_path_list, classfication_path_list, labeling_path_list, split_pattern=" ")
     info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
     # print(info_list)
-    all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/processinfo.txt")
-    data = np.array(all_data)
-    print(np.unique(data[:, 2]))
+    ## for  classification
+    # all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/classificationinfo.txt")
+    # data = np.array(all_data)
+    # print(np.unique(data[:, 2]))
+
+    ##for ner
+    ner_data_info_restore(info_list, "D:/数据/ner.json", isCharSplit=False)
+
+
     # for info in info_list:
     #     print(info)
     #     df = pd.read_json(info["classification_path"],orient="records",encoding="utf-8",lines=True)

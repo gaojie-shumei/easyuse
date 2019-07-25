@@ -23,7 +23,7 @@ class SingleClassification:
         print(args)
         '''
         :param args:
-            if len(args)==7   顺序固定如下
+            if len(args)==8   顺序固定如下
                  bert_config,    bert config
                  bert_is_train,  train or not train in bert
                  input_ids,      word to ids
@@ -31,9 +31,11 @@ class SingleClassification:
                  segment_ids,    the first sentence 0, the second 1
                  bert_name,      the bert model load scope
                  keep_prob,      for dropout
+                 actual_lengths_tensor   actual length placeholder
             else:  顺序固定如下
                 input,      shape[batch,timesteps,word2vec_size]=[None,None,word2vec_size]
                 keep_prob,  for dropout
+                actual_lengths_tensor    actual length placeholder
         :param kwargs:
             isbn,       true to bn    flase not bn
             istrain,    tf.bool for LN and BN
@@ -57,6 +59,7 @@ class SingleClassification:
             bert_name = args[5]
             # istrain = args[6]
             keep_prob = args[6]
+            actual_lengths_tensor = args[7]
             bertfortf = bertTfApi.BertForTensorFlow(bert_config, bert_is_train, input_ids, input_mask,
                                                     segment_ids, scope=bert_name)
             # model = modeling.BertModel(bert_config,bert_is_train,input_ids,input_mask,segment_ids,False,scope=bert_name)
@@ -65,7 +68,19 @@ class SingleClassification:
             self.bertfortf = bertfortf
             model, restore_vars = bertfortf.create_bert_model()
             self.restore_vars = restore_vars
-            output = model.get_pooled_output()
+            # output = model.get_pooled_output()
+            output = model.get_sequence_output()
+            fcell = tf.nn.rnn_cell.MultiRNNCell([self.__get_lstm_cell(256, forget_bias=0.8,
+                                                                      output_keep_prob=keep_prob)
+                                                 for _ in range(2)])
+            bcell = tf.nn.rnn_cell.MultiRNNCell([self.__get_lstm_cell(256, forget_bias=0.8,
+                                                                      output_keep_prob=keep_prob)
+                                                 for _ in range(2)])
+            output, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, output, sequence_length=actual_lengths_tensor,
+                                                        dtype="float")
+            if isinstance(output, tuple):
+                output = tf.concat(output, axis=-1)
+            output = tf.reduce_mean(output, axis=1)
         else:
             input = args[0]
             # istrain = args[1]
@@ -85,7 +100,7 @@ class SingleClassification:
             output = tf.keras.layers.BatchNormalization(trainable=istrain)(output)
         output = self.fc1(output)
         output = self.fc2(output)
-        output = tf.nn.dropout(output,keep_prob=keep_prob)
+        output = tf.nn.dropout(output, keep_prob=keep_prob)
         output = self.softmax(output)
         return output
 
@@ -127,12 +142,14 @@ input_mask = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "input_mas
 segment_ids = tf.placeholder(shape=[None,None], dtype=tf.int32, name = "segment_ids")
 y = tf.placeholder(shape=[None],dtype=tf.int32,name="y")
 keep_prob = tf.placeholder("float")
+actual_lengths_tensor = tf.placeholder(tf.int32,shape=[None])
 def train(data, label, test_data, test_label, bert_base_model_dir, train_num, learning_rate, batch_size):
     tokenizer = tokenization.FullTokenizer(vocab_file=bert_base_model_dir+"/vocab.txt",do_lower_case=False)
     singleclass = SingleClassification()
     output = singleclass(modeling.BertConfig.from_json_file(bert_base_model_dir+"/bert_config.json"), True,
-                         input_ids, input_mask, segment_ids, "bert", keep_prob)
-    loss = tf.losses.sparse_softmax_cross_entropy(y, output)
+                         input_ids, input_mask, segment_ids, "bert", keep_prob,actual_lengths_tensor)
+    # loss = tf.losses.sparse_softmax_cross_entropy(y, output)
+    loss = tf.keras.losses.sparse_categorical_crossentropy(y, output)
     accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(output, axis=-1, output_type=tf.int32), y), "float"))
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
@@ -147,28 +164,31 @@ def train(data, label, test_data, test_label, bert_base_model_dir, train_num, le
             position = 0
             while(position<len(data)):
                 data, label, batch_data, batch_label, position = next_batch(batch_size,data,label,position)
-                batch_input_ids, batch_input_mask, batch_segment_ids, _=convert_batch_data(batch_data, tokenizer)
-                sess.run(train, feed_dict = {
+                batch_input_ids, batch_input_mask, batch_segment_ids, actual_lengths=convert_batch_data(batch_data, tokenizer)
+                sess.run(train, feed_dict={
                     input_ids: batch_input_ids,
                     input_mask: batch_input_mask,
                     segment_ids: batch_segment_ids,
                     keep_prob: 0.5,
-                    y: batch_label
+                    y: batch_label,
+                    actual_lengths_tensor:actual_lengths
                 })
-                if step%25==0:
-                    test_input_ids, test_input_mask, test_segment_ids, _ = convert_batch_data(test_data, tokenizer)
+                if step % 25 == 0:
+                    test_input_ids, test_input_mask, test_segment_ids, test_actual_lengths = convert_batch_data(test_data, tokenizer)
                     print("[train_loss,train_acc]=", sess.run([loss, accuracy], feed_dict={
                         input_ids: batch_input_ids,
                         input_mask: batch_input_mask,
                         segment_ids: batch_segment_ids,
                         keep_prob: 1,
-                        y: batch_label
+                        y: batch_label,
+                        actual_lengths_tensor: actual_lengths
                     }), ",[test_loss,test_acc]=", sess.run([loss, accuracy], feed_dict={
                         input_ids: test_input_ids,
                         input_mask: test_input_mask,
                         segment_ids: test_segment_ids,
                         keep_prob: 1,
-                        y: test_label
+                        y: test_label,
+                        actual_lengths_tensor: test_actual_lengths
                     }))
                 step += 1
 
