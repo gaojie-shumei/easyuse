@@ -161,6 +161,8 @@ class ModelModule:
         if self.model_save_path is not None:
             saver = tf.train.Saver()
             saver.restore(sess,self.model_save_path)
+        else:
+            raise RuntimeError("evaluation: the model not be train or not save to path with giving a model_save_path")
         feed = {}
         try:
             if isinstance(self.inputs, list):
@@ -205,6 +207,8 @@ class ModelModule:
         if self.model_save_path is not None:
             saver = tf.train.Saver()
             saver.restore(sess, self.model_save_path)
+        else:
+            raise RuntimeError("predict: the model not be train or not save to path with giving a model_save_path")
         feed = {}
         try:
             if isinstance(self.inputs, list):

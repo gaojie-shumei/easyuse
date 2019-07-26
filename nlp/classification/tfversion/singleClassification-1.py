@@ -20,7 +20,7 @@ class ClassificationNet(baseNet.BaseNet):
         return outputs
 
 
-def create_model():
+def create_model(model_save_path):
     input = tf.placeholder("float", shape=[None, 784], name="input")
     y = tf.placeholder(tf.int32, shape=[None], name="y")
     layers = []
@@ -30,7 +30,7 @@ def create_model():
     loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, output))
     accuracy = tf.reduce_mean(tf.cast(tf.equal(y, tf.argmax(output, axis=-1, output_type=tf.int32)), "float"))
     optimizer = tf.train.AdamOptimizer(0.001)
-    model = modelModule.ModelModule(input, output, y, loss, optimizer, metrics=accuracy)
+    model = modelModule.ModelModule(input, output, y, loss, optimizer, metrics=accuracy, model_save_path=model_save_path)
     return model
 
 
@@ -60,26 +60,31 @@ def next_batch(x_train,y_train,position,batch_size,shuffle=True,randomstate=np.r
     position += batch_size
     return x_train,y_train,batch_x,batch_y,position
 
-
-model = create_model()
+model_save_path = "./model/singleClassification-1/model.ckpt"
+model = create_model(model_save_path)
 
 
 def train(x_train, y_train, x_test, y_test, train_num, batch_size):
     init = tf.global_variables_initializer()
+    saver = tf.train.Saver()
     with tf.Session() as sess:
         sess.run(init)
+        pre_metrics = 0
         for i in range(train_num):
             position = 0
             while position < x_train.shape[0]:
                 x_train, y_train, batch_x, batch_y, position = next_batch(x_train, y_train, position, batch_size)
                 result = model.batch_fit(sess, batch_x, batch_y, v_inputs_feed=x_test, v_outputs_feed=y_test)
             print("i=", i, "result=", result)
+            if result["v_metrics"] > pre_metrics:
+                pre_metrics = result["v_metrics"]
+                saver.save(sess, model_save_path)
 
 def test(x_test,y_test):
     with tf.Session() as sess:
         result = model.evaluation(sess, x_test, y_test)
-        predict_result = model.predict(sess,x_test)
-        predict_result["predict_outputs"] = np.argmax(predict_result["predict_outputs"],axis=-1)
+        predict_result = model.predict(sess, x_test)
+        predict_result["predict_outputs"] = np.argmax(predict_result["predict_outputs"], axis=-1)
     print("result=", result)
     print(predict_result)
     print("standard outputs=", y_test)
@@ -95,7 +100,7 @@ def main():
     print(x_train.shape, y_train.shape, x_test.shape, y_test.shape)
     print(y_train.dtype, y_test.dtype)
     print("1"*33, "\ntrain\n")
-    train(x_train, y_train, x_test, y_test, train_num=100, batch_size=128)
+    train(x_train, y_train, x_test, y_test, train_num=1, batch_size=128)
     print("1" * 33, "\ntest\n")
     test(x_test, y_test)
 
