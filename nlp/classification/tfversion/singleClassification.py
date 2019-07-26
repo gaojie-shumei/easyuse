@@ -149,7 +149,7 @@ def train(data, label, test_data, test_label, bert_base_model_dir, train_num, le
     output = singleclass(modeling.BertConfig.from_json_file(bert_base_model_dir+"/bert_config.json"), True,
                          input_ids, input_mask, segment_ids, "bert", keep_prob,actual_lengths_tensor)
     # loss = tf.losses.sparse_softmax_cross_entropy(y, output)
-    loss = tf.keras.losses.sparse_categorical_crossentropy(y, output)
+    loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, output))
     accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(output, axis=-1, output_type=tf.int32), y), "float"))
     optimizer = tf.train.AdamOptimizer(learning_rate)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
