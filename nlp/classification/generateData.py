@@ -3,10 +3,12 @@ import pandas as pd
 import numpy as np
 import random
 import math
+
+
 def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", many_data_label=0, data_augmentation_label=2,test_percent=0.5,
                              keyword_path="../data/keyword.csv")->(list, list, list):
     '''读取classification 数据  id  text  label'''
-    df = pd.read_json(jsonPath, orient="records", encoding="utf-8", lines=True)
+    df = pd.read_json(jsonPath, orient="records", encoding=None, lines=True)
     '''获取负面关键词'''
     keyword = np.array(pd.read_csv(keyword_path)).reshape(-1)
     '''将分隔符去除'''

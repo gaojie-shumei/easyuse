@@ -48,20 +48,20 @@ def get_all_file(base_dir,filenamelike=None,filetype=None,uncased=False):
 
 def onebyone(readme_path_list,classfication_path_list,labeling_path_list,split_pattern=" "):
     info_list = []
-    for readme_path in readme_path_list:
-        info_dict = {"readme_path":readme_path}
-        readme_name = ospath.basename(readme_path).rsplit(".",1)[0]
-        readme_dir = ospath.dirname(readme_path)
-        for classfication_path in classfication_path_list:
-            classfication_name = ospath.basename(classfication_path).rsplit(".",1)[0]
-            classfication_dir = ospath.dirname(classfication_path)
+    for classfication_path in classfication_path_list:
+        info_dict = {"classification_path":classfication_path}
+        classfication_name = ospath.basename(classfication_path).rsplit(".",1)[0]
+        classfication_dir = ospath.dirname(classfication_path)
+        for readme_path in readme_path_list:
+            readme_name = ospath.basename(readme_path).rsplit(".",1)[0]
+            readme_dir = ospath.dirname(readme_path)
             if readme_name.split(split_pattern)[-1]==classfication_name.split(split_pattern)[-1] and readme_dir==classfication_dir:
-                info_dict["classification_path"] = classfication_path
+                info_dict["readme_path"] = readme_path
                 break
         for labeling_path in labeling_path_list:
             labeling_name = ospath.basename(labeling_path).rsplit(".",1)[0]
             labeling_dir = ospath.dirname(labeling_path)
-            if readme_name.split(split_pattern)[-1]==labeling_name.split(split_pattern)[-1] and readme_dir==labeling_dir:
+            if classfication_name.split(split_pattern)[-1]==labeling_name.split(split_pattern)[-1] and classfication_dir==labeling_dir:
                 info_dict["labeling_path"] = labeling_path
                 break
         info_list.append(info_dict)
@@ -97,7 +97,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
     all_data = pd.DataFrame(columns=['id', 'text', 'label'])
     for info in info_list:
         try:
-            df = pd.read_json(info["classification_path"], orient='records', encoding='utf-8', lines=True)
+            df = pd.read_json(info["classification_path"], orient='records', encoding=None, lines=True)
         except KeyError as ex:
             print("Error:", ex, "     ", info["readme_path"])
         # new_data = pd.concat([data, df], axis=0, ignore_index=True)
@@ -138,7 +138,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
         df['label'] = df['label'].astype(np.int32)  # 恢复label为int型
         df['label'].replace(label_to, inplace=True)
         all_data = pd.concat([all_data, df], axis=0)
-    all_data.to_json(jsonpath, orient="records", lines=True,force_ascii=False)
+    all_data.to_json(jsonpath, orient="records", lines=True, force_ascii=False)
     if depreated_text is not None and depreated_text != "":
         all_data["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
     data = np.array(all_data)
