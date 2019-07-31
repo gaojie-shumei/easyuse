@@ -7,6 +7,7 @@ import os
 import os.path as ospath
 import pandas as pd
 import numpy as np
+import json
 
 def get_all_file(base_dir,filenamelike=None,filetype=None,uncased=False):
     '''
@@ -145,30 +146,29 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
     data = np.delete(data, np.where(data[:, 1] == "")[0].reshape(-1), axis=0)
     delete_index = []
     for i in range(data.shape[0]):
-        if data[i,2] not in [-1, 0, 1, 2]:
+        if data[i, 2] not in [0, 1, 2]:
             delete_index.append(i)
     data = np.delete(data, delete_index, axis=0)
-    labels = np.unique(data[:,2])
-    processjson_info_str = "labels:"+str(labels)+"\n"
+    labels = np.unique(data[:, 2])
+    processjson_info_str = "labels:" + str(labels) + "\n" + "classification num:" + str(data.shape[0]) + "\n"
     for lb in labels:
         percent = np.sum(data[:, 2] == lb)/data.shape[0]
-        if lb == -1:
-            processjson_info_str += "not sure:{:f} \n".format(percent)
-        elif lb==0:
+        if lb == 0:
             processjson_info_str += "not negative:{:f} \n".format(percent)
-        elif lb==1:
+        elif lb == 1:
             processjson_info_str += "negative but not material:{:f} \n".format(percent)
-        elif lb==2:
+        elif lb == 2:
             processjson_info_str += "negative and material:{:f} \n".format(percent)
         else:
             processjson_info_str += "error:{:f} \n".format(percent)
-    with open(processjson_info_path,mode="w",encoding="utf-8") as f:
+    with open(processjson_info_path,mode="w", encoding="utf-8") as f:
         f.write(processjson_info_str)
     return all_data
 
 
-def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
+def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
     all_ner_data = None
+    nerinfo = {"name": 0, "organization": 0, "when": 0, "where": 0}
     for info in info_list:
         '''获取readme文件中的ner标签对应数组 start'''
         if "name" in info:
@@ -194,7 +194,7 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
         '''获取readme文件中的ner标签对应数组 end'''
 
         try:
-            df = pd.read_json(info["labeling_path"],orient="records",encoding="utf-8",lines=True)
+            df = pd.read_json(info["labeling_path"],orient="records", encoding=None, lines=True)
         except:
             print("json read Error: read info['labeling_path'] failed", info)
             raise RuntimeError("json read Error")
@@ -218,7 +218,9 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
                 if isCharSplit:
                     '''字符分割开始'''
                     try:
-                        nertext,nerlabel = nerTextAndLabelForCharSplit(entities,text=text,need_get_entityType=False)
+                        nertext, nerlabel, nerinfo = nerTextAndLabelForCharSplit(entities, text=text,
+                                                                                 need_get_entityType=False,
+                                                                                 nerinfo=nerinfo)
                     except:
                         print("nertext,label get Error: id=", id, "info=", info)
                         raise RuntimeError("nertext,label get Error")
@@ -226,7 +228,9 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
                 else:
                     '''空格分割开始'''
                     try:
-                        nertext,nerlabel = nerTextAndLabelForSpaceSplit(entities, text=text, need_get_entityType=False)
+                        nertext, nerlabel, nerinfo = nerTextAndLabelForSpaceSplit(entities, text=text,
+                                                                                  need_get_entityType=False,
+                                                                                  nerinfo=nerinfo)
                     except:
                         print("nertext,label get Error: id=", id, "info=", info)
                         raise RuntimeError("nertext,label get Error")
@@ -245,7 +249,7 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
                     if len(data[i, 2]) <= 0:
                         delete_index.append(i)
                 except:
-                    print("annotations len get Error: id=", data[i, 0], "annotations=", data[i,2], "info=", info)
+                    print("annotations len get Error: id=", data[i, 0], "annotations=", data[i, 2], "info=", info)
                     raise RuntimeError("annotations len get Error")
             data = np.delete(data, delete_index, axis=0)
             for i in range(data.shape[0]):
@@ -269,8 +273,9 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
                 if isCharSplit:
                     '''字符分割做法开始'''
                     try:
-                        nertext,nerlabel = nerTextAndLabelForCharSplit(entities, namelabels, organizationlabels,
-                                                                                  whenlabels,wherelabels, text)
+                        nertext, nerlabel, nerinfo = nerTextAndLabelForCharSplit(entities, namelabels, organizationlabels,
+                                                                                 whenlabels, wherelabels, text,
+                                                                                 nerinfo=nerinfo)
                     except:
                         print("nertext,label get Error: id=", id, "info=", info)
                         raise RuntimeError("nertext,label get Error")
@@ -278,8 +283,10 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
                 else:
                     '''空格分割做法开始'''
                     try:
-                        nertext, nerlabel = nerTextAndLabelForSpaceSplit(entities, namelabels, organizationlabels, whenlabels,
-                                                                         wherelabels, text)
+                        nertext, nerlabel, nerinfo = nerTextAndLabelForSpaceSplit(entities, namelabels,
+                                                                                  organizationlabels, whenlabels,
+                                                                                  wherelabels, text,
+                                                                                  nerinfo=nerinfo)
                     except:
                         print("nertext,label get Error: id=", id, "info=", info)
                         raise RuntimeError("nertext,label get Error")
@@ -296,7 +303,9 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
             all_ner_data = np.r_[all_ner_data, ner_data]
         # break
     all_data_df = pd.DataFrame(all_ner_data,columns=["id", "text", "label"])
-    all_data_df.to_json(jsonpath, orient="records", force_ascii=False, lines=True)
+    all_data_df.to_json(jsonPath, orient="records", force_ascii=False, lines=True)
+    with open(infoPath, mode="w+", encoding="utf-8") as f:
+        f.write(json.dumps(nerinfo))
     count_max_512 = 0
     for d in all_ner_data:
         if len(d[1]) > 512:
@@ -305,7 +314,7 @@ def ner_data_info_restore(info_list, jsonpath, isCharSplit=False):
     return all_ner_data, count_max_512
 
 def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=None, whenlabels=None, wherelabels=None,
-                                           text=None, need_get_entityType=True):
+                                           text=None, need_get_entityType=True, nerinfo=None):
     textsplit = list(text)
     label = []
     start_offset = 0
@@ -314,8 +323,21 @@ def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=No
             labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
         else:
             labelname = entity[2].lower()
+            if labelname == "person name":
+                labelname = "name"
+            elif labelname == "organization name":
+                labelname = "organization"
+            elif labelname == "where:":
+                labelname = "where"
+            elif labelname == "when:":
+                labelname = "when"
+            else:
+                pass
+            if labelname not in ["name", "organization", "where", "when"]:
+                raise RuntimeError("labels provided but not in name organization where when"+
+                                   " your labelname is" + labelname)
         if labelname != "none":
-            for i in range(start_offset,entity[0],1):
+            for i in range(start_offset,entity[0], 1):
                 label.append("O")
             for i in range(entity[0],entity[1],1):
                 if i==entity[0]:
@@ -324,6 +346,8 @@ def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=No
                     label.append("I-"+labelname)
                 else:
                     label.append("E-"+labelname)
+            if nerinfo is not None:
+                nerinfo[labelname] += 1
         else:
             for i in range(start_offset,entity[1],1):
                 label.append("O")
@@ -331,10 +355,10 @@ def nerTextAndLabelForCharSplit(entities, namelabels=None, organizationlabels=No
     while start_offset<len(text):
         label.append("O")
         start_offset += 1
-    return textsplit, label
+    return textsplit, label, nerinfo
 
 def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=None, whenlabels=None, wherelabels=None,
-                                           text=None, need_get_entityType=True):
+                                           text=None, need_get_entityType=True, nerinfo=None):
     textsplit = []
     label = []
     start_offset = 0
@@ -343,6 +367,19 @@ def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=N
             labelname = entityType(namelabels, organizationlabels, whenlabels, wherelabels, entity[2])
         else:
             labelname = entity[2].lower()
+            if labelname == "person name":
+                labelname = "name"
+            elif labelname == "organization name":
+                labelname = "organization"
+            elif labelname == "where:":
+                labelname = "where"
+            elif labelname == "when:":
+                labelname = "when"
+            else:
+                pass
+            if labelname not in ["name", "organization", "where", "when"]:
+                raise RuntimeError("labels provided but not in name organization where when"+
+                                   " your labelname is " + labelname)
         if labelname != "none":
             try:
                 temp = text[start_offset:entity[0]]
@@ -369,6 +406,8 @@ def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=N
                 else:
                     textsplit.append(tempsplit[0])
                     label.append("S-" + labelname)
+            if nerinfo is not None:
+                nerinfo[labelname] += 1
         else:
             tempsplit = text[start_offset:entity[1]].strip().split(" ")
             for tmp in tempsplit:
@@ -380,7 +419,7 @@ def nerTextAndLabelForSpaceSplit(entities, namelabels=None, organizationlabels=N
         for tmp in tempsplit:
             textsplit.append(tmp)
             label.append("O")
-    return textsplit, label
+    return textsplit, label, nerinfo
 
 
 def entityType(namelabels, organizationlabels, whenlabels, wherelabels, target):
@@ -407,12 +446,15 @@ def main():
     info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
     # print(info_list)
     ## for  classification
-    all_data = classification_data_info_store(info_list, "D:/数据/classification.json", "D:/数据/classificationinfo.txt")
+    all_data = classification_data_info_store(info_list, "D:/数据/数据处理结果/data/classification.json",
+                                              "D:/数据/数据处理结果/info/classificationinfo/classificationinfo0730.txt")
     data = np.array(all_data)
-    print("classification label=", np.unique(data[:, 2]))
+    # print("classification label=", np.unique(data[:, 2]))
 
     ##for ner
-    all_ner_data,count_max_512 = ner_data_info_restore(info_list, "D:/数据/ner.json", isCharSplit=False)
+    all_ner_data, count_max_512 = ner_data_info_restore(info_list, "D:/数据/数据处理结果/data/ner.json",
+                                                        "D:/数据/数据处理结果/info/nerinfo/nerinfo0730.txt",
+                                                        isCharSplit=False)
     print("ner text split with space or char and count_max_512=", count_max_512)
 
 

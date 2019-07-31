@@ -194,7 +194,7 @@ def train(data, label, test_data, test_label, bert_base_model_dir, train_num, le
 
 def main():
     datapath = "../data/classification.json"
-    keyword_path = "../data/keyword.csv"
+    keyword_path = "../data/keyword.xlsx"
     train_text, train_label, test_text, test_label = read_classification_data(datapath, depreated_text="DirtyDeedsDoneDirtCheap",
                                                                               data_augmentation_label=2, test_percent=0.5,
                                                                               keyword_path=keyword_path)

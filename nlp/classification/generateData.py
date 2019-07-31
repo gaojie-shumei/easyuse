@@ -10,7 +10,7 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     '''读取classification 数据  id  text  label'''
     df = pd.read_json(jsonPath, orient="records", encoding=None, lines=True)
     '''获取负面关键词'''
-    keyword = np.array(pd.read_csv(keyword_path)).reshape(-1)
+    keyword = np.array(pd.read_excel(keyword_path)).reshape(-1)
     '''将分隔符去除'''
     if depreated_text is not None and depreated_text != "":
         df["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
