@@ -9,7 +9,7 @@ class ModelModule:
                  standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor,
                  optimizer: Union[tf.train.Optimizer, tf.keras.optimizers.Optimizer] = tf.keras.optimizers.Adam(0.001),
                  net_configs: Union[tf.Tensor, List[tf.Tensor]] = None, model_save_path: str = None,
-                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None):
+                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, var_list: List[tf.Tensor]=None):
         '''
         :param inputs:  the model inputs, a tensor or tensor list
         :param outputs:  the model outputs, a tensor or tensor list, usually call it predict
@@ -19,6 +19,7 @@ class ModelModule:
         :param net_configs:  the model other net configs with tensor that should be feed by user
         :param model_save_path: the model path for save model
         :param metrics:  the model metrics, like accuracy, MSE and so on
+        :param var_list: the vars need to be trained
         '''
         self._inputs = inputs
         self._outputs = outputs
@@ -30,7 +31,7 @@ class ModelModule:
         self._metrics = metrics
         self._model_save_path = model_save_path
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            self._train_ops = optimizer.minimize(loss)
+            self._train_ops = optimizer.minimize(loss,var_list=var_list)
 
     @property
     def train_ops(self):
