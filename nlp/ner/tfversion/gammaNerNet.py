@@ -120,8 +120,8 @@ def train(textlist, labellist, bert_model_base_dir, train_num, batch_size):
                     print("i=", i, "result=", result)
                 step += 1
             print("i=", i, "result=", result)
-            if result["tr_metrics"] > pre_metrics:
-                pre_metrics = result["tr_metrics"]
+            if result["tr_metrics"][-1] > pre_metrics:
+                pre_metrics = result["tr_metrics"][-1]
                 saver.save(sess, model_save_path)
 
 
