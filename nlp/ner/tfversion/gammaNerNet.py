@@ -116,7 +116,7 @@ def train(textlist, labellist, bert_model_base_dir, train_num, batch_size):
                 inputs = [batch_input_ids, batch_input_mask, batch_segment_ids]
                 # print(batch_label.shape,batch_label.dtype)
                 result = model.batch_fit(sess, inputs, batch_label, batch_size=batch_size)
-                if step == 0:
+                if step %25 == 0:
                     print("i=", i, "result=", result)
                 step += 1
             print("i=", i, "result=", result)

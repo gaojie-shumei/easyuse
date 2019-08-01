@@ -31,7 +31,7 @@ def get_all_file(base_dir,filenamelike=None,filetype=None,uncased=False):
                     else:
                         filetype = None
                 except:
-                    print("Error  :"+ospath.join(base_dir,filename))
+                    raise RuntimeError("get_all_file function Error  :"+ospath.join(base_dir, filename))
                 filenamelike = filenamelike.lower()
                 filetype = filetype.lower()
             if filenamelike is not None and filenamelike in splitname[0].lower():
@@ -46,6 +46,7 @@ def get_all_file(base_dir,filenamelike=None,filetype=None,uncased=False):
                     filepathlist.append(ospath.join(base_dir,filename))
     sorted(filepathlist)
     return filepathlist
+
 
 def onebyone(readme_path_list,classfication_path_list,labeling_path_list,split_pattern=" "):
     info_list = []
@@ -87,7 +88,7 @@ def extract_data(info_list,key_value_split_pattern=":",value_split_pattern=",",e
                                 value_list = [int(val.strip()) for val in value_list]
                                 info_dict[line_list[0].strip().lower()] = value_list
             except:
-                print("file {} is not utf-8".format(info_dict["readme_path"]))
+                raise RuntimeError("extract_data function:file {} is not utf-8".format(info_dict["readme_path"]))
                 # raise(RuntimeError("file encode not is utf-8"))
         info_list[i] = info_dict
     return info_list
@@ -100,7 +101,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
         try:
             df = pd.read_json(info["classification_path"], orient='records', encoding=None, lines=True)
         except KeyError as ex:
-            print("Error:", ex, "     ", info["readme_path"])
+            raise RuntimeError("classification_data_info_store function Error:{}     ".format(ex) + info["readme_path"])
         # new_data = pd.concat([data, df], axis=0, ignore_index=True)
         """提取id,label,text三列"""
         # try:
@@ -114,7 +115,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
                 else:
                     dflabel.append(-1)
             except:
-                print("Error:id=", dfdata[i, 0], ",info=", info)
+                raise RuntimeError(" classification_data_info_store function Error:id={},info=".format(dfdata[i, 0]) + str(info))
                 dflabel.append(-1)
         dflabel = np.array(dflabel)
         df = pd.DataFrame(np.c_[dfdata[:, 0:2], dflabel], columns=columns)
@@ -133,7 +134,7 @@ def classification_data_info_store(info_list, jsonpath, processjson_info_path, d
             for negetive_and_material in info["negative and material"]:
                 label_to[negetive_and_material] = 2
         except KeyError as e:
-            print("Error:", e, "    ", info)
+            raise RuntimeError("classification_data_info_store function Error:{},info=".format(e) + str(info))
 #         print(info["not negative"],info["negative but not material"],info["negetive and material"],label_to)
 #         print(df.columns)
         df['label'] = df['label'].astype(np.int32)  # 恢复label为int型
@@ -196,8 +197,9 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
         try:
             df = pd.read_json(info["labeling_path"],orient="records", encoding=None, lines=True)
         except:
-            print("json read Error: read info['labeling_path'] failed", info)
-            raise RuntimeError("json read Error")
+            raise RuntimeError("ner_data_info_store function json read Error: read info['labeling_path'] failed,info=" +
+                               str(info))
+            # raise RuntimeError("json read Error")
         ner_data = None
         if "labels" in df.columns:
             '''新版本做法'''
@@ -209,8 +211,9 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                     if len(data[i, 2]) <= 0:
                         delete_index.append(i)
                 except:
-                    print("labels len get Error: id=", data[i, 0], "labels=", data[i, 2], "info=", info)
-                    raise RuntimeError("labels len get Error")
+                    raise RuntimeError("ner_data_info_store function labels len get Error: id={},labels={},info="
+                                       .format(data[i, 0], data[i, 2]) + str(info))
+                    # raise RuntimeError("labels len get Error")
             data = np.delete(data, delete_index, axis=0)
             for i in range(data.shape[0]):
                 id, text, entities = data[i, 0], data[i,1], data[i, 2]
@@ -222,8 +225,9 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                                                                                  need_get_entityType=False,
                                                                                  nerinfo=nerinfo)
                     except:
-                        print("nertext,label get Error: id=", id, "info=", info)
-                        raise RuntimeError("nertext,label get Error")
+                        raise RuntimeError("ner_data_info_store function nertext,label get Error: id={},info="
+                                           .format(id) + str(info))
+                        # raise RuntimeError("nertext,label get Error")
                     '''字符分割结束'''
                 else:
                     '''空格分割开始'''
@@ -232,8 +236,8 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                                                                                   need_get_entityType=False,
                                                                                   nerinfo=nerinfo)
                     except:
-                        print("nertext,label get Error: id=", id, "info=", info)
-                        raise RuntimeError("nertext,label get Error")
+                        raise RuntimeError("ner_data_info_store function nertext,label get Error: id={},info="
+                                           .format(id) + str(info))
                     '''空格分割结束'''
                 if ner_data is None:
                     ner_data = np.array([[id, nertext, nerlabel]])
@@ -249,8 +253,9 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                     if len(data[i, 2]) <= 0:
                         delete_index.append(i)
                 except:
-                    print("annotations len get Error: id=", data[i, 0], "annotations=", data[i, 2], "info=", info)
-                    raise RuntimeError("annotations len get Error")
+                    raise RuntimeError("ner_data_info_store function annotations len get Error: id={}," +
+                                       "annotations={},info={}".format(data[i, 0], data[i, 2], info))
+                    # raise RuntimeError("annotations len get Error")
             data = np.delete(data, delete_index, axis=0)
             for i in range(data.shape[0]):
                 id = data[i, 0]
@@ -268,8 +273,9 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                         entities.append(np.array(entity).tolist())
                     sorted(entities, key=(lambda x: x[0]))
                 except:
-                    print("annotations entity get Error:id=", id, "info=", info)
-                    raise RuntimeError("annotations entity get Error")
+                    raise RuntimeError("ner_data_info_stroe function annotations entity get Error:id={},info={}"
+                                       .format(id, info))
+                    # raise RuntimeError("annotations entity get Error")
                 if isCharSplit:
                     '''字符分割做法开始'''
                     try:
@@ -277,8 +283,10 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                                                                                  whenlabels, wherelabels, text,
                                                                                  nerinfo=nerinfo)
                     except:
-                        print("nertext,label get Error: id=", id, "info=", info)
-                        raise RuntimeError("nertext,label get Error")
+                        raise RuntimeError("ner_data_info_store function nertext,label get Error: id={},info="
+                                           .format(id) + str(info))
+                        # print("nertext,label get Error: id=", id, "info=", info)
+                        # raise RuntimeError("nertext,label get Error")
                     '''字符分割做法结束'''
                 else:
                     '''空格分割做法开始'''
@@ -288,8 +296,10 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
                                                                                   wherelabels, text,
                                                                                   nerinfo=nerinfo)
                     except:
-                        print("nertext,label get Error: id=", id, "info=", info)
-                        raise RuntimeError("nertext,label get Error")
+                        raise RuntimeError("ner_data_info_store function nertext,label get Error: id={},info="
+                                           .format(id) + str(info))
+                        # print("nertext,label get Error: id=", id, "info=", info)
+                        # raise RuntimeError("nertext,label get Error")
                     '''空格分割做法结束'''
                 if ner_data is None:
                     ner_data = np.array([[id, nertext, nerlabel]])
@@ -304,12 +314,12 @@ def ner_data_info_restore(info_list, jsonPath, infoPath, isCharSplit=False):
         # break
     all_data_df = pd.DataFrame(all_ner_data,columns=["id", "text", "label"])
     all_data_df.to_json(jsonPath, orient="records", force_ascii=False, lines=True)
-    with open(infoPath, mode="w+", encoding="utf-8") as f:
-        f.write(json.dumps(nerinfo))
     count_max_512 = 0
     for d in all_ner_data:
         if len(d[1]) > 512:
             count_max_512 += 1
+    with open(infoPath, mode="w+", encoding="utf-8") as f:
+        f.write(json.dumps(nerinfo)+"\ncount_max_512={}".format(count_max_512))
     # print("count_max_512=", count_max_512)
     return all_ner_data, count_max_512
 
@@ -447,13 +457,13 @@ def main():
     # print(info_list)
     ## for  classification
     all_data = classification_data_info_store(info_list, "D:/数据/数据处理结果/data/classification.json",
-                                              "D:/数据/数据处理结果/info/classificationinfo/classificationinfo0730.txt")
+                                              "D:/数据/数据处理结果/info/classificationinfo/classificationinfo0731.txt")
     data = np.array(all_data)
     # print("classification label=", np.unique(data[:, 2]))
 
     ##for ner
     all_ner_data, count_max_512 = ner_data_info_restore(info_list, "D:/数据/数据处理结果/data/ner.json",
-                                                        "D:/数据/数据处理结果/info/nerinfo/nerinfo0730.txt",
+                                                        "D:/数据/数据处理结果/info/nerinfo/nerinfo0731.txt",
                                                         isCharSplit=False)
     print("ner text split with space or char and count_max_512=", count_max_512)
 
@@ -471,4 +481,4 @@ def main():
     #     break
 
 if __name__ == '__main__':
-    main()    
+    main()
