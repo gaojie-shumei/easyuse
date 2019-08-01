@@ -6,11 +6,12 @@ import math
 
 
 def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", many_data_label=0, data_augmentation_label=2,test_percent=0.5,
-                             keyword_path="../data/keyword.csv")->(list, list, list):
+                             keyword_path="../data/keyword.csv"):
     '''读取classification 数据  id  text  label'''
     df = pd.read_json(jsonPath, orient="records", encoding=None, lines=True)
     '''获取负面关键词'''
-    keyword = np.array(pd.read_excel(keyword_path)).reshape(-1)
+    keyword = np.array(pd.read_excel(keyword_path))[:, 0]
+    print(keyword)
     '''将分隔符去除'''
     if depreated_text is not None and depreated_text != "":
         df["text"].replace(depreated_text + "(:|：)*([0-9]*)", "", regex=True, inplace=True)
@@ -98,9 +99,11 @@ def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,spli
         textsplit = np.array(textsplit)[shuffle_index]
         data.append(np.array([id, " ".join(textsplit), label]))
         for word in keyword:
+            word = str(word)
             ts = np.array(textsplit).tolist()
             insert_index = random.randint(0, len(ts))
             ts.insert(insert_index, word)
+            data.append(np.array([id, " ".join(ts), label]))
             shuffle_index = random.sample(range(len(ts)), len(ts))
             ts = np.array(ts)[shuffle_index]
             data.append(np.array([id, " ".join(ts), label]))

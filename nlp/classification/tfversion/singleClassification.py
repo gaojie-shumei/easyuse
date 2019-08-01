@@ -49,7 +49,7 @@ class SingleClassification:
             istrain = kwargs["istrain"]
         else:
             istrain = False
-        if len(args)==7:
+        if len(args)==8:
             print("7777777777777777777777")
             bert_config = args[0]
             bert_is_train = args[1]
@@ -93,7 +93,7 @@ class SingleClassification:
                                                                       output_keep_prob=keep_prob)
                                                  for _ in range(2)])
             output, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, input, sequence_length=actual_lengths_tensor,dtype="float")
-            if isinstance(output,tuple):
+            if isinstance(output, tuple):
                 output = tf.concat(output, axis=-1)
             output = tf.reduce_mean(output, axis=1)
         if isbn:
