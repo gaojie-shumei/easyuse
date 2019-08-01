@@ -158,6 +158,8 @@ def convert_single_sample(sample: list, tokenizer: tokenization.FullTokenizer):
     input_mask = [1] * len(input_ids)
     actual_length = len(input_ids)
     return tokens, input_ids, input_mask, segment_ids, actual_length
+
+
 def convert_batch_data(batch_data, tokenizer:tokenization.FullTokenizer,bert_max_len=512):
     batch_tokens, batch_input_ids, batch_input_mask, batch_segment_ids, actual_lengths = [], [], [], [], []
     max_len = 0
@@ -182,6 +184,7 @@ def convert_batch_data(batch_data, tokenizer:tokenization.FullTokenizer,bert_max
             batch_input_ids[i] = np.array(batch_input_ids[i][0:max_len])
             batch_input_mask[i] = np.array(batch_input_mask[i][0:max_len])
             batch_segment_ids[i] = np.array(batch_segment_ids[i][0:max_len])
+            actual_lengths[i] = max_len
     return batch_input_ids, batch_input_mask, batch_segment_ids, actual_lengths
 # if __name__=="__main__":
     # data, label = read_data("./data/sub.csv")
