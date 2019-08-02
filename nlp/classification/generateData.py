@@ -5,12 +5,16 @@ import random
 import math
 
 
-def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", many_data_label=0, data_augmentation_label=2,test_percent=0.5,
-                             keyword_path="../data/keyword.csv"):
+def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", data_augmentation_label=2,
+                             test_percent=0.5, keyword_path="../data/keyword.xlsx"):
     '''读取classification 数据  id  text  label'''
     df = pd.read_json(jsonPath, orient="records", encoding=None, lines=True)
     '''获取负面关键词'''
-    keyword = np.array(pd.read_excel(keyword_path))[:, 0]
+    keyword = pd.read_excel(keyword_path)
+    keyword = keyword.fillna("")
+    keyword = np.array(keyword).reshape(-1)
+    keyword = keyword[keyword!=""]
+    # print(np.isnan(keyword))
     print(keyword)
     '''将分隔符去除'''
     if depreated_text is not None and depreated_text != "":
@@ -28,41 +32,12 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     data = np.delete(data, delete_index, axis=0)
     '''获取需要数据增强的类别数据'''
     need_data_augmentation = data[data[:, 2] == data_augmentation_label]
-    print("need_data_augmentation.shape",need_data_augmentation.shape)
+    print("need_data_augmentation.shape", need_data_augmentation.shape)
     np.random.shuffle(need_data_augmentation)
     print("need_data_augmentation.shape", need_data_augmentation.shape)
-    test_data = None
-    other_data = None
-    many_data = data[data[:, 2] == many_data_label]
-    for label in [0, 1, 2]:
-        if label !=many_data_label:
-            label_data = data[data[:, 2]==label]
-            test_num = math.ceil(label_data.shape[0]*test_percent)
-            if test_data is None:
-                test_data = label_data[0:test_num]
-            else:
-                test_data = np.r_[test_data, label_data[0:test_num]]
-            if other_data is None:
-                if label != data_augmentation_label:
-                    other_data = label_data[test_num:]
-            else:
-                if label != data_augmentation_label:
-                    other_data = np.r_[other_data,label_data[test_num:]]
-    test_num = math.ceil(many_data.shape[0]*test_percent)
-    if test_data is None:
-        test_data = many_data[0:test_num]
-        if other_data is None:
-            other_data = many_data[test_num:]
-        else:
-            other_data = np.r_[other_data,many_data[test_num:]]
-    else:
-        if other_data is None:
-            other_data = many_data[test_data.shape[0]:]
-        else:
-            other_data = np.r_[other_data, many_data[test_data.shape[0]:]]
-        test_data = np.r_[test_data, many_data[0:test_data.shape[0]]]
-
     test_num = math.ceil(need_data_augmentation.shape[0]*test_percent)
+    test_data = need_data_augmentation[0:test_num]
+    other_data = data[data[:, 2] != data_augmentation_label]
     '''数据增强的数据确定'''
     need_data_augmentation = need_data_augmentation[test_num:]
     print("need_data_augmentation.shape", need_data_augmentation.shape)
@@ -72,7 +47,7 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     # other_data = data[data[:, 2] != data_augmentation_label]
     # print(other_data.shape,data_augmentation_data.shape)
     '''训练数据拼接'''
-    if data_augmentation_data.shape[0]<= other_data.shape[0]:
+    if data_augmentation_data.shape[0] <= other_data.shape[0]:
         data = np.r_[other_data, data_augmentation_data]
     else:
         data = np.r_[other_data, data_augmentation_data[0:other_data.shape[0]]]
@@ -82,7 +57,8 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     test_label = test_data[:, 2].tolist()
     train_text = data[:, 1].tolist()
     train_label = data[:, 2].tolist()
-    return train_text,train_label,test_text,test_label
+    return train_text, train_label, test_text, test_label
+
 
 def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,split_regex = " "):
     data = []
@@ -99,7 +75,8 @@ def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,spli
         textsplit = np.array(textsplit)[shuffle_index]
         data.append(np.array([id, " ".join(textsplit), label]))
         for word in keyword:
-            word = str(word)
+            if isinstance(word, str)==False:
+                continue
             ts = np.array(textsplit).tolist()
             insert_index = random.randint(0, len(ts))
             ts.insert(insert_index, word)
@@ -109,6 +86,7 @@ def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,spli
             data.append(np.array([id, " ".join(ts), label]))
     data = np.array(data)
     return data
+
 
 def next_batch(batch_size, data_x:list, data_y:list=None, position=0, shuffle=True, random_state=random.randint(0,1000)):
     temp_data_x = data_x[position:]
@@ -137,6 +115,7 @@ def next_batch(batch_size, data_x:list, data_y:list=None, position=0, shuffle=Tr
             batch_y = None
     position += batch_size
     return data_x, data_y, batch_x, batch_y, position
+
 
 def convert_single_sample(sample: list, tokenizer: tokenization.FullTokenizer):
     '''
