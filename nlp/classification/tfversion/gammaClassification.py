@@ -131,18 +131,18 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         for i in range(train_num):
             position = 0
             while position < len(train_text):
-                if i == 0:
+                # if i == 0:
                     # print("batch")
                 train_text, train_label, batch_x, batch_y, position = next_batch(batch_size, train_text, train_label,
                                                                                  position)
                 batch_input_ids, batch_input_mask, batch_segment_ids, _ = convert_batch_data(batch_x, tokenizer)
                 tr_inputs_feed = [batch_input_ids, batch_input_mask, batch_segment_ids]
                 tr_net_configs_feed = [learning_rate, 1]
-                if i == 0:
+                # if i == 0:
                     # print("batch fit start")
                 result = model.batch_fit(sess, tr_inputs_feed, batch_y, tr_net_configs_feed, v_inputs_feed,
                                          v_outputs_feed, v_net_configs_feed, batch_size)
-                if i == 0:
+                # if i == 0:
                     # print("batch fit end")
                 if step % 25 == 0:
                     print("i={},step={},result={}".format(i, step, result))
