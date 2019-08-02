@@ -9,7 +9,7 @@ class ModelModule:
                  standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor,
                  optimizer: Union[tf.train.Optimizer, tf.keras.optimizers.Optimizer] = tf.keras.optimizers.Adam(0.001),
                  net_configs: Union[tf.Tensor, List[tf.Tensor]] = None, model_save_path: str = None,
-                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, var_list: List[tf.Tensor]=None):
+                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, var_list: List[tf.Tensor] = None):
         '''
         :param inputs:  the model inputs, a tensor or tensor list
         :param outputs:  the model outputs, a tensor or tensor list, usually call it predict
@@ -31,7 +31,7 @@ class ModelModule:
         self._metrics = metrics
         self._model_save_path = model_save_path
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            self._train_ops = optimizer.minimize(loss,var_list=var_list)
+            self._train_ops = optimizer.minimize(loss, var_list=var_list)
 
     @property
     def train_ops(self):
@@ -105,10 +105,11 @@ class ModelModule:
             position = 0
             v_metrics = None
             while position < length:
+                # print("validation position:{}".format(position))
                 batch_inputs_feed, batch_outputs_feed, position = self.__next_batch(v_inputs_feed, v_outputs_feed,
                                                                                     batch_size, position)
                 try:
-                    feed = self.__feed(v_inputs_feed, v_outputs_feed, v_net_configs_feed)
+                    feed = self.__feed(batch_inputs_feed, batch_outputs_feed, v_net_configs_feed)
                 except RuntimeError as e:
                     raise RuntimeError("validation:" + e)
                 if v_metrics is None:
@@ -120,21 +121,25 @@ class ModelModule:
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
-                   batch_size=64):
+                   batch_size=64, is_in_train=False):
         '''
         :param sess: tf.Session for test
         :param test_inputs_feed: same to batch_fit function's parameter of tr_inputs_feed
         :param test_outputs_feed:  same to batch_fit function's parameter of tr_outputs_feed
         :param test_net_configs_feed:  same to batch_fit function's parameter of tr_net_configs_feed
+        :param is_in_train: is also train and only test it is correct
         :return:
             a result dict, the key is 'test_metrics'
         '''
         result = {}
         if self.model_save_path is not None:
             saver = tf.train.Saver()
-            saver.restore(sess,self.model_save_path)
+            saver.restore(sess, self.model_save_path)
         else:
-            raise RuntimeError("evaluation: the model not be train or not save to path with giving a model_save_path")
+            if is_in_train:
+                pass
+            else:
+                raise RuntimeError("evaluation:the model not be train or not save with giving a model_save_path")
         try:
             length = self.__getfeedlength(test_inputs_feed)
         except RuntimeError as e:
@@ -157,21 +162,25 @@ class ModelModule:
         result["test_metrics"] = test_metrics
         return result
 
-    def predict(self, sess: tf.Session, inputs_feed, net_configs_feed=None, batch_size=64):
+    def predict(self, sess: tf.Session, inputs_feed, net_configs_feed=None, batch_size=64, is_in_train=False):
         '''
         :param sess: tf.Session
         :param inputs_feed: same to batch_fit function's parameter of tr_inputs_feed
         :param net_configs_feed: same to batch_fit function's parameter of tr_net_configs_feed
         :param batch_size: batch size
+        :param is_in_train: is also train and only test it is correct
         :return:
-            a result dict, the key is 'predict_outputs'
+            a result dict, the key is 'predict'
         '''
         result = {}
         if self.model_save_path is not None:
             saver = tf.train.Saver()
             saver.restore(sess, self.model_save_path)
         else:
-            raise RuntimeError("predict: the model not be train or not save to path with giving a model_save_path")
+            if is_in_train:
+                pass
+            else:
+                raise RuntimeError("predict: the model not be train or not save with giving a model_save_path")
         try:
             length = self.__getfeedlength(inputs_feed)
         except RuntimeError as e:
@@ -262,7 +271,7 @@ class ModelModule:
         '''
         if isinstance(self.inputs, list):
             batch_inputs_feed = []
-            if len(self.inputs)!=len(inputs_feed):
+            if len(self.inputs) != len(inputs_feed):
                 # print("next batch inputs_feed length error")
                 raise RuntimeError("next batch inputs_feed length error")
             for i in range(len(self.inputs)):
