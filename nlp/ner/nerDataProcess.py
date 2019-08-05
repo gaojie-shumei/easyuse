@@ -53,10 +53,10 @@ def convert_one_sample(sample: list, sample_label: list=None, tokenizer: tokeniz
             label = label[0:max_len]
     input_mask = [1] * len(input_ids)
     segment_ids = [0] * len(input_ids)
-    return tokens, input_ids, input_mask, segment_ids, label
+    return tokens, input_ids, input_mask, segment_ids, label, len(input_ids)
 
 
-def convert_batch_data(batch_sample: list,batch_sample_label: list=None, tokenizer: tokenization.FullTokenizer=None,
+def convert_batch_data(batch_sample: list, batch_sample_label: list=None, tokenizer: tokenization.FullTokenizer=None,
                        max_len=512, unique_label: list=None, pad_word="[PAD]"):
     if tokenizer is None:
         raise RuntimeError("tokenizer should be provide")
@@ -73,21 +73,24 @@ def convert_batch_data(batch_sample: list,batch_sample_label: list=None, tokeniz
         batch_label = None
 
     use_max_len = 0
+    squence_lengths = []
     for i in range(len(batch_sample)):
         if batch_sample_label is not None:
-            tokens, input_ids, input_mask, segment_ids, label = convert_one_sample(batch_sample[i],
+            tokens, input_ids, input_mask, segment_ids, label, lengths = convert_one_sample(batch_sample[i],
                                                                                    batch_sample_label[i], tokenizer,
                                                                                    max_len, unique_label)
             batch_label.append(label)
         else:
-            tokens, input_ids, input_mask, segment_ids, label = convert_one_sample(batch_sample[i], None, tokenizer,
+            tokens, input_ids, input_mask, segment_ids, label,lengths = convert_one_sample(batch_sample[i], None, tokenizer,
                                                                                    max_len, unique_label)
+        squence_lengths.append(lengths)
         if len(input_ids) > use_max_len:
             use_max_len = len(input_ids)
         batch_tokens.append(tokens)
         batch_input_ids.append(input_ids)
         batch_input_mask.append(input_mask)
         batch_segment_ids.append(segment_ids)
+    squence_lengths = np.array(squence_lengths)
     for i in range(len(batch_sample)):
         if batch_sample_label is not None:
             batch_label[i] = np.array(batch_label[i] + [unique_label.index(pad_word)] * (use_max_len-len(batch_label[i])))
@@ -101,7 +104,7 @@ def convert_batch_data(batch_sample: list,batch_sample_label: list=None, tokeniz
     batch_input_mask = np.array(batch_input_mask).astype(np.int32)
     batch_segment_ids = np.array(batch_segment_ids).astype(np.int32)
     batch_tokens = np.array(batch_tokens)
-    return batch_tokens, batch_input_ids, batch_input_mask, batch_segment_ids, batch_label
+    return batch_tokens, batch_input_ids, batch_input_mask, batch_segment_ids, batch_label, squence_lengths
 
 
 def next_batch(textlist: list, position, batch_size, shuffle=True, random_state=random.randint(0, 1000),

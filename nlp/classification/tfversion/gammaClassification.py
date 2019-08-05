@@ -17,15 +17,14 @@ class GammaClassNet(baseNet.BaseNet):
         self.drop_rate = drop_rate
         self.output_size = output_size
         self.use_bert = use_bert
-        self.lstm = tf.keras.layers.LSTM(lstm_units, kernel_initializer="he_normal", recurrent_initializer="he_normal",
-                                         kernel_regularizer=self.l2, recurrent_regularizer=self.l2,
-                                         activity_regularizer=self.l2, dropout=drop_rate, recurrent_dropout= drop_rate,
-                                         return_sequences=True)
+        self.lstm = tf.keras.layers.LSTM(lstm_units, kernel_initializer="he_normal", kernel_regularizer=self.l2,
+                                         dropout=drop_rate, recurrent_dropout=drop_rate, return_sequences=True)
         self.masking = tf.keras.layers.Masking(0)
-        self.bilstm = tf.keras.layers.Bidirectional(self.lstm,merge_mode="ave")
+        self.bilstm = tf.keras.layers.Bidirectional(self.lstm, merge_mode="concat")
+        self.fc = tf.keras.layers.Dense(lstm_units/2, activation=tf.keras.activations.relu,
+                                             kernel_initializer="he_normal", kernel_regularizer=self.l2)
         self.softmax = tf.keras.layers.Dense(output_size, activation=tf.keras.activations.softmax,
-                                             kernel_initializer="he_normal", kernel_regularizer=self.l2,
-                                             activity_regularizer=self.l2)
+                                             kernel_initializer="he_normal", kernel_regularizer=self.l2)
 
     def net(self, inputs):
         if self.use_bert:
@@ -45,14 +44,16 @@ class GammaClassNet(baseNet.BaseNet):
         output = self.masking(output)
         output = self.bilstm(output)
         output = tf.reduce_mean(output, axis=1)
+        output = self.fc(output)
         output = self.softmax(output)
+        print(output.get_shape().as_list())
         outputs = {
             "output": output,
             "bert_vars": bert_vars
         }
         return outputs
 
-lstm_units = 1024
+lstm_units = 256
 l2_scale = 0
 drop_rate = 0
 output_size = 3
@@ -68,7 +69,7 @@ def class_model():
         segment_ids = tf.placeholder(tf.int32, shape=[None, None], name="segment_ids")
     else:
         input = tf.placeholder("float", shape=[None, None, word2vec_size], name="input")
-    y = tf.placeholder(tf.int32, shape=[None], name="y")
+    y = tf.placeholder("float", shape=[None, output_size], name="y")
     is_train = tf.keras.backend.learning_phase()  #1 for train 0 for test
     lr = tf.placeholder("float")
     bert_config = modeling.BertConfig.from_json_file(bert_model_base_dir+"/bert_config.json")
@@ -89,8 +90,8 @@ def class_model():
     outputs = net(net_inputs)
     output = outputs["output"]
     bert_vars = outputs["bert_vars"]
-    loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, output))
-    accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(y, output))
+    loss = tf.pow(tf.abs((y - output)), 2)*tf.log(output)
+    accuracy = tf.reduce_mean(tf.keras.metrics.categorical_accuracy(y, output))
 
     if use_bert:
         model_inputs = [input_ids, input_mask, segment_ids]
@@ -112,6 +113,7 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
     print("train")
     if use_bert:
         tokenizer = tokenization.FullTokenizer(bert_model_base_dir+"/vocab.txt", do_lower_case=True)
+    test_label = tf.keras.utils.to_categorical(test_label, output_size)
     test_input_ids, test_input_mask, test_segment_ids, _ = convert_batch_data(test_text, tokenizer)
     v_inputs_feed = [test_input_ids, test_input_mask, test_segment_ids]
     v_outputs_feed = test_label
@@ -120,14 +122,14 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         restore_saver = tf.train.Saver(bert_vars)
     saver = tf.train.Saver()
     init = tf.global_variables_initializer()
-    with tf.Session() as sess:
+    config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+    with tf.Session(config=config) as sess:
         print("tf.Session()")
         sess.run(init)
         if bert_vars is not None:
             restore_saver.restore(sess, bert_model_base_dir+"/bert_model.ckpt")
         print("restore saver")
         step = 0
-        flag = 0
         for i in range(train_num):
             position = 0
             while position < len(train_text):
@@ -135,6 +137,7 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
                     # print("batch")
                 train_text, train_label, batch_x, batch_y, position = next_batch(batch_size, train_text, train_label,
                                                                                  position)
+                batch_y = tf.keras.utils.to_categorical(batch_y, output_size)
                 batch_input_ids, batch_input_mask, batch_segment_ids, _ = convert_batch_data(batch_x, tokenizer)
                 tr_inputs_feed = [batch_input_ids, batch_input_mask, batch_segment_ids]
                 tr_net_configs_feed = [learning_rate, 1]
@@ -146,14 +149,14 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
                     # print("batch fit end")
                 if step % 25 == 0:
                     print("i={},step={},result={}".format(i, step, result))
-                if result["v_metrics"] > 0.5 and flag == 0:
-                    flag = 1
-                    predict = model.predict(sess, v_inputs_feed, v_net_configs_feed, batch_size, is_in_train=True)
-                    predict["predict"] = np.argmax(predict["predict"], axis=-1)
-                    print("predict=", predict["predict"].tolist())
-                    print("      y=", test_label)
                 step += 1
-    # return
+            if result["v_metrics"] > 0.5 and result["tr_metrics"] > 0.9:
+                predict = model.predict(sess, v_inputs_feed, v_net_configs_feed, batch_size, is_in_train=True)
+                predict["predict"] = np.argmax(predict["predict"], axis=-1)
+                print("predict=", predict["predict"].tolist())
+                print("      y=", test_label)
+
+    return
 
 
 def main():
