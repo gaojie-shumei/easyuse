@@ -89,8 +89,10 @@ def nermodel(bert_model_base_dir, unique_label: list, model_save_path):
     metrics = [true_pad_label_num, true_O_label_num, true_FIX_label_num, pad_label_correct, O_label_correct,
                FIX_label_correct, accuracy_all, entity_true, accuracy]
     optimizer = tf.train.AdamOptimizer(lr)
-    model = modelModule.ModelModule(modelinputs, output, y, loss, optimizer, net_configs=lr,
-                                    model_save_path=model_save_path, metrics=metrics, var_list=tf.global_variables())
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+        train_ops = optimizer.minimize(loss)
+    model = modelModule.ModelModule(modelinputs, output, y, loss, train_ops, net_configs=lr,
+                                    model_save_path=model_save_path, metrics=metrics)
     return model, bert_vars
 
 bert_model_base_dir = "../../bertapi/base_model/cased_L-12_H-768_A-12"
@@ -101,6 +103,8 @@ model, bert_vars = nermodel(bert_model_base_dir, unique_label, model_save_path)
 
 
 def train(textlist, labellist, bert_model_base_dir, train_num, batch_size):
+    print(tf.test.is_built_with_cuda())
+    print(tf.test.is_gpu_available())
     tokenizer = tokenization.FullTokenizer(bert_model_base_dir+"/vocab.txt", do_lower_case=False)
     init = tf.global_variables_initializer()
     saver = tf.train.Saver()
@@ -135,7 +139,7 @@ def train(textlist, labellist, bert_model_base_dir, train_num, batch_size):
 
 
 def main():
-    train(textlist, labellist, bert_model_base_dir, train_num=100, batch_size=128)
+    train(textlist, labellist, bert_model_base_dir, train_num=100, batch_size=64)
 
 
 if __name__ == '__main__':

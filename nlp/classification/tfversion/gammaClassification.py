@@ -1,9 +1,9 @@
-from module.tfversion import baseNet,modelModule
+from module.tfversion import baseNet, modelModule
 import tensorflow as tf
 from bert import modeling,tokenization
 from nlp.classification.generateData import *
-import warnings
-warnings.filterwarnings(action="ignore")
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  #只显示error
 
 
 class GammaClassNet(baseNet.BaseNet):
@@ -90,7 +90,7 @@ def class_model():
     outputs = net(net_inputs)
     output = outputs["output"]
     bert_vars = outputs["bert_vars"]
-    loss = tf.pow(tf.abs((y - output)), 2)*tf.log(output)
+    loss = tf.reduce_mean(tf.pow(tf.abs((y - output)), 2)*tf.log(output))
     accuracy = tf.reduce_mean(tf.keras.metrics.categorical_accuracy(y, output))
 
     if use_bert:
@@ -101,7 +101,9 @@ def class_model():
     model_y = y
     net_configs = [lr, is_train]
     optimizer = tf.train.AdamOptimizer(lr)
-    model = modelModule.ModelModule(model_inputs, model_outputs, model_y, loss, optimizer, net_configs,
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+        train_ops = optimizer.minimize(loss)
+    model = modelModule.ModelModule(model_inputs, model_outputs, model_y, loss, train_ops, net_configs,
                                     metrics=accuracy)
     return model, bert_vars
 
@@ -111,6 +113,8 @@ model, bert_vars = class_model()
 
 def train(train_text, train_label, test_text, test_label, train_num, learning_rate, batch_size):
     print("train")
+    # print(tf.test.is_built_with_cuda())
+    # print(tf.test.is_gpu_available())
     if use_bert:
         tokenizer = tokenization.FullTokenizer(bert_model_base_dir+"/vocab.txt", do_lower_case=True)
     test_label = tf.keras.utils.to_categorical(test_label, output_size)
@@ -122,7 +126,7 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         restore_saver = tf.train.Saver(bert_vars)
     saver = tf.train.Saver()
     init = tf.global_variables_initializer()
-    config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+    config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction = 0.9))
     with tf.Session(config=config) as sess:
         print("tf.Session()")
         sess.run(init)
@@ -131,12 +135,12 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         print("restore saver")
         step = 0
         for i in range(train_num):
-            position = 0
-            while position < len(train_text):
+            generator = generator_batch(batch_size,train_text,train_label)
+            for batch_x, batch_y in generator:
                 # if i == 0:
                     # print("batch")
-                train_text, train_label, batch_x, batch_y, position = next_batch(batch_size, train_text, train_label,
-                                                                                 position)
+                # train_text, train_label, batch_x, batch_y, position = next_batch(batch_size, train_text, train_label,
+                #                                                                  position)
                 batch_y = tf.keras.utils.to_categorical(batch_y, output_size)
                 batch_input_ids, batch_input_mask, batch_segment_ids, _ = convert_batch_data(batch_x, tokenizer)
                 tr_inputs_feed = [batch_input_ids, batch_input_mask, batch_segment_ids]
@@ -170,7 +174,7 @@ def main():
     print(len(train_label), len(test_label))
     train_num = 100
     learning_rate = 0.0005
-    batch_size = 128
+    batch_size = 64
     train(train_text, train_label, test_text, test_label, train_num, learning_rate, batch_size)
 
 

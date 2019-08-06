@@ -35,7 +35,9 @@ def create_model(model_save_path):
     loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(y, output))
     accuracy = tf.reduce_mean(tf.cast(tf.equal(y, tf.argmax(output, axis=-1, output_type=tf.int32)), "float"))
     optimizer = tf.train.AdamOptimizer(0.001)
-    model = modelModule.ModelModule(input, output, y, loss, optimizer, metrics=accuracy,
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+        train_ops = optimizer.minimize(loss)
+    model = modelModule.ModelModule(input, output, y, loss, train_ops, metrics=accuracy,
                                     model_save_path=model_save_path, net_configs=keep_prob)
     return model
 

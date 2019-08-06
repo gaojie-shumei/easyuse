@@ -107,6 +107,37 @@ def convert_batch_data(batch_sample: list, batch_sample_label: list=None, tokeni
     return batch_tokens, batch_input_ids, batch_input_mask, batch_segment_ids, batch_label, squence_lengths
 
 
+def generator_batch(textlist: list, batch_size, shuffle=True, random_state=random.randint(0,1000),labellist: list=None):
+    position = 0
+    while position < len(textlist):
+        temp_t = textlist[position:]
+        if labellist is not None:
+            temp_l = labellist[position:]
+        else:
+            temp_l = None
+        if shuffle:
+            random.seed(random_state)
+            random.shuffle(temp_t)
+            if labellist is not None:
+                random.seed(random_state)
+                random.shuffle(temp_l)
+        textlist = textlist[0:position] + temp_t
+        if labellist is not None:
+            labellist = labellist[0:position] + temp_l
+        if batch_size < len(temp_t):
+            batch_sample = textlist[position:position + batch_size]
+            if labellist is not None:
+                batch_sample_label = labellist[position:position + batch_size]
+        else:
+            batch_sample = textlist[position:]
+            if labellist is not None:
+                batch_sample_label = labellist[position:]
+        if labellist is None:
+            batch_sample_label = None
+        position += batch_size
+        yield (batch_sample, batch_sample_label)
+
+
 def next_batch(textlist: list, position, batch_size, shuffle=True, random_state=random.randint(0, 1000),
                labellist: list=None):
     temp_t = textlist[position:]

@@ -122,7 +122,7 @@ class ModelModule:
                 else:
                     if isinstance(self.metrics, list):
                         for i in range(len(self.metrics)):
-                            v_metrics[i] = np.r_[v_metrics[i],b_v_metrics[i]]
+                            v_metrics[i] = np.r_[v_metrics[i], b_v_metrics[i]]
                     else:
                         v_metrics = np.r_[v_metrics, b_v_metrics]
             v_loss = np.mean(np.array(v_loss))
@@ -344,7 +344,7 @@ class ModelModule:
                 else:
                     # print("one input feed must be list or numpy.ndarray")
                     raise RuntimeError("your type is " + str(type(inputs_feed[i])) +
-                                    ",but one input feed must be list or numpy.ndarray")
+                                       ",but one input feed must be list or numpy.ndarray")
             # pass
         else:
             if isinstance(inputs_feed, list):
@@ -373,7 +373,7 @@ class ModelModule:
                         batch_inputs_feed = np.r_[batch_inputs_feed, inputs_feed[0:res]]
             else:
                 raise RuntimeError("your type is " + str(type(inputs_feed)) +
-                                ",but one input feed must be list or numpy.ndarray")
+                                   ",but one input feed must be list or numpy.ndarray")
 
         if outputs_feed is not None:
             if isinstance(self.standard_outputs, list):
@@ -407,7 +407,7 @@ class ModelModule:
                             batch_outputs_feed.append(temp)
                     else:
                         raise RuntimeError("your type is " + str(type(outputs_feed[i])) +
-                                        ",but one output feed must be list or numpy.ndarray")
+                                           ",but one output feed must be list or numpy.ndarray")
             else:
                 if isinstance(outputs_feed, list):
                     if position+batch_size < len(outputs_feed):
@@ -435,7 +435,7 @@ class ModelModule:
                             batch_outputs_feed = np.r_[batch_outputs_feed, outputs_feed[0:res]]
                 else:
                     raise RuntimeError("your type is " + str(type(outputs_feed)) +
-                                    ",but one output feed must be list or numpy.ndarray")
+                                       ",but one output feed must be list or numpy.ndarray")
         else:
             batch_outputs_feed = None
         position += batch_size

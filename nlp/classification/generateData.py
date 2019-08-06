@@ -88,7 +88,62 @@ def data_augmentation(need_data_augmentation:np.ndarray, keyword:np.ndarray,spli
     return data
 
 
-def next_batch(batch_size, data_x:list, data_y:list=None, position=0, shuffle=True, random_state=random.randint(0,1000)):
+def generator_batch(batch_size, data_x: list, data_y: list=None, shuffle=True, random_state=random.randint(0, 1000)):
+    position = 0
+    while position < len(data_x):
+        temp_data_x = data_x[position:]
+        if data_y is not None:
+            temp_data_y = data_y[position:]
+        if shuffle:
+            random.seed(random_state)
+            random.shuffle(temp_data_x)
+            if data_y is not None:
+                random.seed(random_state)
+                random.shuffle(temp_data_y)
+        data_x = data_x[0:position] + temp_data_x
+        if data_y is not None:
+            data_y = data_y[0:position] + temp_data_y
+        if position + batch_size >= len(data_x):
+            if batch_size <= len(data_x):
+                batch_x = data_x
+                if data_y is not None:
+                    batch_y = data_y
+                else:
+                    batch_y = None
+            else:
+                res = batch_size
+                batch_x = []
+                if data_y is not None:
+                    batch_y = []
+                else:
+                    batch_y = None
+                while res > len(data_x):
+                    batch_x = batch_x + data_x
+                    if data_y is not None:
+                        batch_y = batch_y + data_y
+                    res -= len(data_x)
+                if res > 0:
+                    batch_x = batch_x + data_x[0:res]
+                    if data_y is not None:
+                        batch_y = batch_y + data_y[0:res]
+        else:
+            batch_x = temp_data_x[0:batch_size]
+            if data_y is not None:
+                batch_y = temp_data_y[0:batch_size]
+            else:
+                batch_y = None
+        if shuffle:
+            random.seed(random_state)
+            random.shuffle(batch_x)
+            if data_y is not None:
+                random.seed(random_state)
+                random.shuffle(batch_y)
+        position += batch_size
+        yield (batch_x, batch_y)
+
+
+def next_batch(batch_size, data_x: list, data_y: list=None, position=0, shuffle=True,
+               random_state=random.randint(0, 1000)):
     temp_data_x = data_x[position:]
     if data_y is not None:
         temp_data_y = data_y[position:]
@@ -101,18 +156,41 @@ def next_batch(batch_size, data_x:list, data_y:list=None, position=0, shuffle=Tr
     data_x = data_x[0:position] + temp_data_x
     if data_y is not None:
         data_y = data_y[0:position] + temp_data_y
-    if batch_size >= len(temp_data_x):
-        batch_x = temp_data_x
-        if data_y is not None:
-            batch_y = temp_data_y
+    if position + batch_size >= len(data_x):
+        if batch_size <= len(data_x):
+            batch_x = data_x
+            if data_y is not None:
+                batch_y = data_y
+            else:
+                batch_y = None
         else:
-            batch_y = None
+            res = batch_size
+            batch_x = []
+            if data_y is not None:
+                batch_y = []
+            else:
+                batch_y = None
+            while res > len(data_x):
+                batch_x = batch_x + data_x
+                if data_y is not None:
+                    batch_y = batch_y + data_y
+                res -= len(data_x)
+            if res > 0:
+                batch_x = batch_x + data_x[0:res]
+                if data_y is not None:
+                    batch_y = batch_y + data_y[0:res]
     else:
         batch_x = temp_data_x[0:batch_size]
         if data_y is not None:
             batch_y = temp_data_y[0:batch_size]
         else:
             batch_y = None
+    if shuffle:
+        random.seed(random_state)
+        random.shuffle(batch_x)
+        if data_y is not None:
+            random.seed(random_state)
+            random.shuffle(batch_y)
     position += batch_size
     return data_x, data_y, batch_x, batch_y, position
 
