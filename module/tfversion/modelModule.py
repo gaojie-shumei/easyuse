@@ -6,32 +6,28 @@ import numpy as np
 
 class ModelModule:
     def __init__(self, inputs: Union[tf.Tensor, List[tf.Tensor]], outputs: Union[tf.Tensor, List[tf.Tensor]],
-                 standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor,
-                 optimizer: Union[tf.train.Optimizer, tf.keras.optimizers.Optimizer] = tf.keras.optimizers.Adam(0.001),
+                 standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor, train_ops: tf.Tensor,
                  net_configs: Union[tf.Tensor, List[tf.Tensor]] = None, model_save_path: str = None,
-                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, var_list: List[tf.Tensor] = None):
+                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None):
         '''
         :param inputs:  the model inputs, a tensor or tensor list
         :param outputs:  the model outputs, a tensor or tensor list, usually call it predict
         :param standard_outputs: the model standard outputs, a tensor or tensor list, usually call it y
         :param loss:  the model loss, for model train, a tensor
-        :param optimizer: the model optimizer with parameters, like adam(learning_rate=0.001)
+        :param train_ops: the train ops
         :param net_configs:  the model other net configs with tensor that should be feed by user
         :param model_save_path: the model path for save model
         :param metrics:  the model metrics, like accuracy, MSE and so on
-        :param var_list: the vars need to be trained
         '''
         self._inputs = inputs
         self._outputs = outputs
         self._standard_outputs = standard_outputs
         self._loss = loss
-        self._optimizer = optimizer
         # self._learning_rate = learning_rate
         self._net_configs = net_configs
         self._metrics = metrics
         self._model_save_path = model_save_path
-        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            self._train_ops = optimizer.minimize(loss, var_list=var_list)
+        self._train_ops = train_ops
 
     @property
     def train_ops(self):
@@ -52,10 +48,6 @@ class ModelModule:
     @property
     def loss(self):
         return self._loss
-
-    @property
-    def optimizer(self):
-        return self._optimizer
 
     # @property
     # def learning_rate(self):
@@ -94,30 +86,54 @@ class ModelModule:
             feed = self.__feed(tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed)
         except RuntimeError as e:
             raise RuntimeError("train:" + e)
-        # print(feed)
-        _, tr_metrics = sess.run([self.train_ops, self.metrics], feed_dict=feed)
+        # print(sess, self.train_ops, self.loss, self.metrics)
+        tr_metrics = None
+        if self.metrics is not None:
+            _, tr_loss, tr_metrics = sess.run([self.train_ops, self.loss, self.metrics], feed_dict=feed)
+        else:
+            _, tr_loss = sess.run([self.train_ops, self.loss], feed_dict=feed)
         result["tr_metrics"] = tr_metrics
+        result["tr_loss"] = tr_loss
         if v_inputs_feed is not None and v_outputs_feed is not None:
             try:
                 length = self.__getfeedlength(v_inputs_feed)
             except RuntimeError as e:
                 raise RuntimeError("validation:" + e)
             position = 0
+            v_loss = []
             v_metrics = None
             while position < length:
                 # print("validation position:{}".format(position))
-                batch_inputs_feed, batch_outputs_feed, position = self.__next_batch(v_inputs_feed, v_outputs_feed,
-                                                                                    batch_size, position)
+                batch_inputs_feed, batch_outputs_feed, position, actual_length = self.__next_batch(v_inputs_feed,
+                                                                                                   v_outputs_feed,
+                                                                                                   batch_size, position)
                 try:
                     feed = self.__feed(batch_inputs_feed, batch_outputs_feed, v_net_configs_feed)
                 except RuntimeError as e:
                     raise RuntimeError("validation:" + e)
-                if v_metrics is None:
-                    v_metrics = sess.run(self.metrics, feed_dict=feed)
+                b_v_metrics = None
+                if self.metrics is not None:
+                    b_v_loss, b_v_metrics = sess.run([self.loss, self.metrics], feed_dict=feed)
                 else:
-                    v_metrics = np.r_[v_metrics, sess.run(self.metrics, feed_dict=feed)]
-            v_metrics = np.mean(v_metrics, axis=0)
+                    b_v_loss = sess.run(self.loss, feed_dict=feed)
+                v_loss.append(b_v_loss)
+                if v_metrics is None:
+                    v_metrics = b_v_metrics
+                else:
+                    if isinstance(self.metrics, list):
+                        for i in range(len(self.metrics)):
+                            v_metrics[i] = np.r_[v_metrics[i],b_v_metrics[i]]
+                    else:
+                        v_metrics = np.r_[v_metrics, b_v_metrics]
+            v_loss = np.mean(np.array(v_loss))
+            if v_metrics is not None:
+                if isinstance(self.metrics, list):
+                    for i in range(len(self.metrics)):
+                        v_metrics[i] = np.mean(v_metrics[i], axis=0)
+                else:
+                    v_metrics = np.mean(v_metrics, axis=0)
             result["v_metrics"] = v_metrics
+            result["v_loss"] = v_loss
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
@@ -147,19 +163,38 @@ class ModelModule:
 
         position = 0
         test_metrics = None
+        test_loss = []
         while position < length:
-            batch_inputs_feed, batch_outputs_feed, position = self.__next_batch(test_inputs_feed, test_outputs_feed,
-                                                                                batch_size, position)
+            batch_inputs_feed, batch_outputs_feed, position, actual_length = self.__next_batch(test_inputs_feed,
+                                                                                               test_outputs_feed,
+                                                                                               batch_size, position)
             try:
                 feed = self.__feed(batch_inputs_feed, batch_outputs_feed, test_net_configs_feed)
             except RuntimeError as e:
                 raise RuntimeError("test:" + e)
-            if test_metrics is None:
-                test_metrics = sess.run(self.metrics, feed_dict=feed)
+            b_test_metrics = None
+            if self.metrics is not None:
+                b_test_loss, b_test_metrics = sess.run([self.loss, self.metrics], feed_dict=feed)
             else:
-                test_metrics = np.r_[test_metrics, sess.run(self.metrics, feed_dict=feed)]
-        test_metrics = np.mean(np.array(test_metrics), axis=0)
+                b_test_loss = sess.run(self.loss, feed_dict=feed)
+            test_loss.append(b_test_loss)
+            if test_metrics is None:
+                test_metrics = b_test_metrics
+            else:
+                if isinstance(self.metrics, list):
+                    for i in range(len(self.metrics)):
+                        test_metrics[i] = np.r_[test_metrics[i], b_test_metrics[i]]
+                else:
+                    test_metrics = np.r_[test_metrics, b_test_metrics]
+        if self.metrics is not None:
+            if isinstance(self.metrics, list):
+                for i in range(len(self.metrics)):
+                    test_metrics[i] = np.mean(test_metrics[i], axis=0)
+            else:
+                test_metrics = np.mean(np.array(test_metrics), axis=0)
+        test_loss = np.mean(np.array(test_loss))
         result["test_metrics"] = test_metrics
+        result["test_loss"] = test_loss
         return result
 
     def predict(self, sess: tf.Session, inputs_feed, net_configs_feed=None, batch_size=64, is_in_train=False):
@@ -188,15 +223,16 @@ class ModelModule:
         predict_outputs = None
         position = 0
         while position < length:
-            batch_inputs_feed, batch_outputs_feed, position = self.__next_batch(inputs_feed, None, batch_size, position)
+            batch_inputs_feed, batch_outputs_feed, position, actual_length = self.__next_batch(inputs_feed, None,
+                                                                                               batch_size, position)
             try:
                 feed = self.__feed(batch_inputs_feed, None, net_configs_feed=net_configs_feed)
             except RuntimeError as e:
                 raise RuntimeError("predict:" + e)
             if predict_outputs is None:
-                predict_outputs = sess.run(self.outputs, feed_dict=feed)
+                predict_outputs = sess.run(self.outputs, feed_dict=feed)[0:actual_length]
             else:
-                predict_outputs = np.r_[predict_outputs, sess.run(self.outputs, feed_dict=feed)]
+                predict_outputs = np.r_[predict_outputs, sess.run(self.outputs, feed_dict=feed)[0:actual_length]]
         result["predict"] = predict_outputs
         return result
 
@@ -267,8 +303,9 @@ class ModelModule:
         :param batch_size: batch size
         :param position: the position for this batch
         :return:
-         a tuple of (batch_inputs_feed, batch_outputs_feed, position)
+         a tuple of (batch_inputs_feed, batch_outputs_feed, position, actual_length)
         '''
+        actual_length = None
         if isinstance(self.inputs, list):
             batch_inputs_feed = []
             if len(self.inputs) != len(inputs_feed):
@@ -276,15 +313,34 @@ class ModelModule:
                 raise RuntimeError("next batch inputs_feed length error")
             for i in range(len(self.inputs)):
                 if isinstance(inputs_feed[i], list):
-                    if position + batch_size < len(inputs_feed[i]):
+                    if position + batch_size <= len(inputs_feed[i]):
                         batch_inputs_feed.append(inputs_feed[i][position:position + batch_size])
                     else:
-                        batch_inputs_feed.append(inputs_feed[i][position:])
+                        temp = list(inputs_feed[i][position:])
+                        # batch_inputs_feed.append(inputs_feed[i][position:])
+                        res = batch_size - len(inputs_feed[i][position:])
+                        actual_length = len(inputs_feed[i][position:])
+                        while res > len(inputs_feed[i]):
+                            temp = temp + inputs_feed[i]
+                            res -= len(inputs_feed[i])
+                        if res > 0:
+                            temp = temp + inputs_feed[i][0:res]
+                        batch_inputs_feed.append(temp)
                 elif isinstance(inputs_feed[i], np.ndarray):
                     if position + batch_size < inputs_feed[i].shape[0]:
                         batch_inputs_feed.append(inputs_feed[i][position:position + batch_size])
                     else:
-                        batch_inputs_feed.append(inputs_feed[i][position:])
+                        temp = np.array(inputs_feed[i][position:])
+                        # batch_inputs_feed.append(inputs_feed[i][position:])
+                        res = batch_size - inputs_feed[i][position:].shape[0]
+                        actual_length = inputs_feed[i][position:].shape[0]
+                        while res > inputs_feed[i].shape[0]:
+                            temp = np.r_[temp, inputs_feed[i]]
+                            res -= inputs_feed[i].shape[0]
+                        if res > 0:
+                            temp = np.r_[temp, inputs_feed[i][0:res]]
+                        batch_inputs_feed.append(temp)
+                        # batch_inputs_feed.append(inputs_feed[i][position:])
                 else:
                     # print("one input feed must be list or numpy.ndarray")
                     raise RuntimeError("your type is " + str(type(inputs_feed[i])) +
@@ -292,15 +348,29 @@ class ModelModule:
             # pass
         else:
             if isinstance(inputs_feed, list):
-                if position+batch_size<len(inputs_feed):
+                if position+batch_size < len(inputs_feed):
                     batch_inputs_feed = inputs_feed[position:position+batch_size]
                 else:
-                    batch_inputs_feed = inputs_feed[position:]
+                    batch_inputs_feed = list(inputs_feed[position:])
+                    actual_length = len(inputs_feed[position:])
+                    res = batch_size - len(inputs_feed[position:])
+                    while res >= len(inputs_feed):
+                        batch_inputs_feed = batch_inputs_feed + inputs_feed
+                        res = res - len(inputs_feed)
+                    if res > 0:
+                        batch_inputs_feed = batch_inputs_feed + inputs_feed[0:res]
             elif isinstance(inputs_feed, np.ndarray):
                 if position + batch_size < inputs_feed.shape[0]:
                     batch_inputs_feed = inputs_feed[position:position + batch_size]
                 else:
-                    batch_inputs_feed = inputs_feed[position:]
+                    batch_inputs_feed = np.array(inputs_feed[position:])
+                    actual_length = inputs_feed[position:].shape[0]
+                    res = batch_size - inputs_feed[position:].shape[0]
+                    while res >= inputs_feed.shape[0]:
+                        batch_inputs_feed = np.r_[batch_inputs_feed, inputs_feed]
+                        res = res - inputs_feed.shape[0]
+                    if res > 0:
+                        batch_inputs_feed = np.r_[batch_inputs_feed, inputs_feed[0:res]]
             else:
                 raise RuntimeError("your type is " + str(type(inputs_feed)) +
                                 ",but one input feed must be list or numpy.ndarray")
@@ -313,12 +383,28 @@ class ModelModule:
                         if position + batch_size < len(outputs_feed[i]):
                             batch_outputs_feed.append(outputs_feed[i][position:position + batch_size])
                         else:
-                            batch_outputs_feed.append(outputs_feed[i][position:])
+                            temp = list(outputs_feed[i][position:])
+                            res = batch_size - len(outputs_feed[i][position:])
+                            actual_length = len(outputs_feed[i][position:])
+                            while res > len(outputs_feed[i]):
+                                temp = temp + outputs_feed[i]
+                                res -= len(outputs_feed[i])
+                            if res > 0:
+                                temp = temp + outputs_feed[i][0:res]
+                            batch_outputs_feed.append(temp)
                     elif isinstance(outputs_feed[i], np.ndarray):
                         if position + batch_size < outputs_feed[i].shape[0]:
                             batch_outputs_feed.append(outputs_feed[i][position:position + batch_size])
                         else:
-                            batch_outputs_feed.append(outputs_feed[i][position:])
+                            temp = np.array(outputs_feed[i][position:])
+                            res = batch_size - outputs_feed[i][position:].shape[0]
+                            actual_length = outputs_feed[i][position:].shape[0]
+                            while res > outputs_feed[i].shape[0]:
+                                temp = np.r_[temp, outputs_feed[i]]
+                                res -= outputs_feed[i].shape[0]
+                            if res > 0:
+                                temp = np.r_[temp, outputs_feed[i][0:res]]
+                            batch_outputs_feed.append(temp)
                     else:
                         raise RuntimeError("your type is " + str(type(outputs_feed[i])) +
                                         ",but one output feed must be list or numpy.ndarray")
@@ -327,16 +413,30 @@ class ModelModule:
                     if position+batch_size < len(outputs_feed):
                         batch_outputs_feed = outputs_feed[position:position+batch_size]
                     else:
-                        batch_outputs_feed = outputs_feed[position:]
+                        batch_outputs_feed = list(outputs_feed[position:])
+                        actual_length = len(outputs_feed[position:])
+                        res = batch_size - len(outputs_feed[position:])
+                        while res >= len(outputs_feed):
+                            batch_outputs_feed = batch_outputs_feed + outputs_feed
+                            res = res - len(outputs_feed)
+                        if res > 0:
+                            batch_outputs_feed = batch_outputs_feed + outputs_feed[0:res]
                 elif isinstance(outputs_feed, np.ndarray):
                     if position+batch_size < outputs_feed.shape[0]:
                         batch_outputs_feed = outputs_feed[position:position+batch_size]
                     else:
-                        batch_outputs_feed = outputs_feed[position:]
+                        batch_outputs_feed = np.array(outputs_feed[position:])
+                        actual_length = outputs_feed[position:].shape[0]
+                        res = batch_size - outputs_feed[position:].shape[0]
+                        while res >= outputs_feed.shape[0]:
+                            batch_outputs_feed = np.r_[batch_outputs_feed, outputs_feed]
+                            res = res - outputs_feed.shape[0]
+                        if res > 0:
+                            batch_outputs_feed = np.r_[batch_outputs_feed, outputs_feed[0:res]]
                 else:
                     raise RuntimeError("your type is " + str(type(outputs_feed)) +
                                     ",but one output feed must be list or numpy.ndarray")
         else:
             batch_outputs_feed = None
         position += batch_size
-        return batch_inputs_feed, batch_outputs_feed, position
+        return batch_inputs_feed, batch_outputs_feed, position, actual_length
