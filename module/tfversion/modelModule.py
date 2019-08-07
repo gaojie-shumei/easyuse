@@ -66,7 +66,8 @@ class ModelModule:
         return self._metrics
 
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
-                  v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64):
+                  v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
+                  return_outputs=False):
         '''
 
         :param sess:  a tf.Session for train
@@ -77,9 +78,11 @@ class ModelModule:
         :param v_outputs_feed: same with tr_outputs_feed ,but for validation
         :param v_net_configs_feed: same with tr_net_configs_feed ,but for validation
         :param batch_size: this batch_size only for validation
+        :param return_outputs: return the outputs or not
         :return:
-            the self.metrics value with the feed value, wrapped with a dict, the train metrics value's key is 'tr_metrics'
-            the validation if exist,the validation metrics value's key is 'v_metrics'
+            a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
+            is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
+            the validation if exist                             'v_loss','v_metrics','v_outputs'
         '''
         result = {}
         try:
@@ -88,11 +91,15 @@ class ModelModule:
             raise RuntimeError("train:" + e)
         # print(sess, self.train_ops, self.loss, self.metrics)
         tr_metrics = None
+
         if self.metrics is not None:
             _, tr_loss, tr_metrics = sess.run([self.train_ops, self.loss, self.metrics], feed_dict=feed)
+            result["tr_metrics"] = tr_metrics
         else:
             _, tr_loss = sess.run([self.train_ops, self.loss], feed_dict=feed)
-        result["tr_metrics"] = tr_metrics
+        if return_outputs:
+            tr_outputs = sess.run(self.outputs, feed_dict=feed)
+            result["tr_outputs"] = tr_outputs
         result["tr_loss"] = tr_loss
         if v_inputs_feed is not None and v_outputs_feed is not None:
             try:
@@ -102,6 +109,7 @@ class ModelModule:
             position = 0
             v_loss = []
             v_metrics = None
+            v_outputs = None
             while position < length:
                 # print("validation position:{}".format(position))
                 batch_inputs_feed, batch_outputs_feed, position, actual_length = self.__next_batch(v_inputs_feed,
@@ -125,6 +133,17 @@ class ModelModule:
                             v_metrics[i] = np.r_[v_metrics[i], b_v_metrics[i]]
                     else:
                         v_metrics = np.r_[v_metrics, b_v_metrics]
+                if return_outputs:
+                    b_v_outputs = sess.run(self.outputs, feed_dict=feed)
+                    if v_outputs is None:
+                        v_outputs = b_v_outputs
+                    else:
+                        if isinstance(self.outputs, list):
+                            for i in range(len(self.outputs)):
+                                v_outputs[i] = np.r_[v_outputs[i], b_v_outputs[i]]
+                        else:
+                            v_outputs = np.r_[v_outputs, b_v_outputs]
+
             v_loss = np.mean(np.array(v_loss))
             if v_metrics is not None:
                 if isinstance(self.metrics, list):
@@ -132,20 +151,24 @@ class ModelModule:
                         v_metrics[i] = np.mean(v_metrics[i], axis=0)
                 else:
                     v_metrics = np.mean(v_metrics, axis=0)
-            result["v_metrics"] = v_metrics
+                result["v_metrics"] = v_metrics
             result["v_loss"] = v_loss
+            if return_outputs:
+                result["v_outputs"] = v_outputs
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
-                   batch_size=64, is_in_train=False):
+                   batch_size=64, is_in_train=False, return_outputs=False):
         '''
         :param sess: tf.Session for test
         :param test_inputs_feed: same to batch_fit function's parameter of tr_inputs_feed
         :param test_outputs_feed:  same to batch_fit function's parameter of tr_outputs_feed
         :param test_net_configs_feed:  same to batch_fit function's parameter of tr_net_configs_feed
         :param is_in_train: is also train and only test it is correct
+        :param return_outputs: return the outputs or not
         :return:
-            a result dict, the key is 'test_metrics'
+            a result dict of self.loss, if self.metrics is not None,self.metrics will append to result,if return_outputs
+            is True, the self.outputs will be in result, the key is 'test_loss','test_metrics','test_outputs'
         '''
         result = {}
         if self.model_save_path is not None:
@@ -164,6 +187,7 @@ class ModelModule:
         position = 0
         test_metrics = None
         test_loss = []
+        test_outputs = None
         while position < length:
             batch_inputs_feed, batch_outputs_feed, position, actual_length = self.__next_batch(test_inputs_feed,
                                                                                                test_outputs_feed,
@@ -186,14 +210,26 @@ class ModelModule:
                         test_metrics[i] = np.r_[test_metrics[i], b_test_metrics[i]]
                 else:
                     test_metrics = np.r_[test_metrics, b_test_metrics]
+            if return_outputs:
+                b_test_outputs = sess.run(self.outputs, feed_dict=feed)
+                if test_outputs is None:
+                    test_outputs = b_test_outputs
+                else:
+                    if isinstance(self.outputs, list):
+                        for i in range(len(self.outputs)):
+                            test_outputs[i] = np.r_[test_outputs[i], b_test_outputs[i]]
+                    else:
+                        test_outputs = np.r_[test_outputs, b_test_outputs]
         if self.metrics is not None:
             if isinstance(self.metrics, list):
                 for i in range(len(self.metrics)):
                     test_metrics[i] = np.mean(test_metrics[i], axis=0)
             else:
                 test_metrics = np.mean(np.array(test_metrics), axis=0)
+            result["test_metrics"] = test_metrics
+        if return_outputs:
+            result["test_outputs"] = test_outputs
         test_loss = np.mean(np.array(test_loss))
-        result["test_metrics"] = test_metrics
         result["test_loss"] = test_loss
         return result
 
