@@ -2,13 +2,13 @@
 from typing import Union, List
 import tensorflow as tf
 import numpy as np
-
+from datetime import datetime
 
 class ModelModule:
     def __init__(self, inputs: Union[tf.Tensor, List[tf.Tensor]], outputs: Union[tf.Tensor, List[tf.Tensor]],
                  standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor, train_ops: tf.Tensor,
                  net_configs: Union[tf.Tensor, List[tf.Tensor]] = None, model_save_path: str = None,
-                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None):
+                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, gpu_num=0):
         '''
         :param inputs:  the model inputs, a tensor or tensor list
         :param outputs:  the model outputs, a tensor or tensor list, usually call it predict
@@ -18,6 +18,7 @@ class ModelModule:
         :param net_configs:  the model other net configs with tensor that should be feed by user
         :param model_save_path: the model path for save model
         :param metrics:  the model metrics, like accuracy, MSE and so on
+        :param gpu_num: if use multi gpu, it should be provide
         '''
         self._inputs = inputs
         self._outputs = outputs
@@ -28,6 +29,11 @@ class ModelModule:
         self._metrics = metrics
         self._model_save_path = model_save_path
         self._train_ops = train_ops
+        self._gpu_num = gpu_num
+
+    @property
+    def gpu_num(self):
+        return self._gpu_num
 
     @property
     def train_ops(self):
@@ -91,7 +97,6 @@ class ModelModule:
             raise RuntimeError("train:" + e)
         # print(sess, self.train_ops, self.loss, self.metrics)
         tr_metrics = None
-
         if self.metrics is not None:
             _, tr_loss, tr_metrics = sess.run([self.train_ops, self.loss, self.metrics], feed_dict=feed)
             result["tr_metrics"] = tr_metrics
@@ -143,7 +148,6 @@ class ModelModule:
                                 v_outputs[i] = np.r_[v_outputs[i], b_v_outputs[i]]
                         else:
                             v_outputs = np.r_[v_outputs, b_v_outputs]
-
             v_loss = np.mean(np.array(v_loss))
             if v_metrics is not None:
                 if isinstance(self.metrics, list):
@@ -341,6 +345,8 @@ class ModelModule:
         :return:
          a tuple of (batch_inputs_feed, batch_outputs_feed, position, actual_length)
         '''
+        if self.gpu_num>0:
+            batch_size = batch_size*self.gpu_num
         actual_length = None
         if isinstance(self.inputs, list):
             batch_inputs_feed = []
