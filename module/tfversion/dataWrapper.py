@@ -98,6 +98,7 @@ class TFDataWrapper:
         :param is_train:  is train set or not
         :param drop_remainder:  if len(all_features)%batch_size!=0, drop the next data or not
         :return:
+            tf.data.Dataset,data with tensor,iterator
         '''
         if gpu_num>0:
             batch_size = batch_size*gpu_num
@@ -140,8 +141,13 @@ class TFDataWrapper:
         if is_train:
             tf_data = tf_data.repeat()
             tf_data = tf_data.shuffle(buffer_size=100)
-        tf_data = tf_data.batch(batch_size,drop_remainder)
-        return tf_data
+        try:
+            tf_data = tf_data.batch(batch_size,drop_remainder)
+        except:
+            tf_data = tf_data.batch(batch_size)
+        it = tf_data.make_initializable_iterator()
+        data = it.get_next()
+        return tf_data, data, it
 
     def __call__(self, all_features: List[InputFeatures], batch_size, gpu_num=0, is_train=True,
                  drop_remainder=False)->tf.data.Dataset:
@@ -246,22 +252,27 @@ class TFRecordWrapper:
             sample[name] = t
         return sample
 
-    def read(self, is_train: bool, batch_size, gpu_num=0, drop_remainder=False)->tf.data.Dataset:
+    def read(self, is_train: bool, batch_size, gpu_num=0, drop_remainder=False):
         '''
         :param is_train: is train set or not,if is train set, it will be repeat and shuffle
         :param batch_size: batch size for cpu or one GPU
         :param gpu_num: if use gpu to train or test or evalution, it should provide
         :param drop_remainder:  if the set is less than batch_size or batch_size*gpu_num,drop it or not
         :return:
+            tf.data.Dataset,data with tensor,iterator
         '''
+        if gpu_num > 0:
+            batch_size = batch_size*gpu_num
         tf_record = tf.data.TFRecordDataset(self.file_path)
         if is_train:
             tf_record = tf_record.repeat()
             tf_record = tf_record.shuffle(buffer_size=100)
 
         tf_record = tf_record.map(lambda record: self.__decode_record(record))
-        if gpu_num<=0:
-            tf_record = tf_record.batch(batch_size=batch_size, drop_remainder=drop_remainder)
-        else:
-            tf_record = tf_record.batch(batch_size=batch_size*gpu_num, drop_remainder=drop_remainder)
-        return tf_record
+        try:
+            tf_record = tf_record.batch(batch_size, drop_remainder)
+        except:
+            tf_record = tf_record.batch(batch_size)
+        it = tf_record.make_initializable_iterator()
+        data = it.get_next()
+        return tf_record, data, it
