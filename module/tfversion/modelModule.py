@@ -108,7 +108,7 @@ class ModelModule:
         result["tr_loss"] = tr_loss
         if v_inputs_feed is not None and v_outputs_feed is not None:
             try:
-                length = self.__getfeedlength(v_inputs_feed)
+                length = self.__get_feed_length(v_inputs_feed)
             except RuntimeError as e:
                 raise RuntimeError("validation:" + e)
             position = 0
@@ -141,13 +141,18 @@ class ModelModule:
                 if return_outputs:
                     b_v_outputs = sess.run(self.outputs, feed_dict=feed)
                     if v_outputs is None:
+                        if isinstance(self.outputs, list):
+                            for i in range(len(self.outputs)):
+                                b_v_outputs[i] = b_v_outputs[i][0:actual_length]
+                        else:
+                            b_v_outputs = b_v_outputs[0:actual_length]
                         v_outputs = b_v_outputs
                     else:
                         if isinstance(self.outputs, list):
                             for i in range(len(self.outputs)):
-                                v_outputs[i] = np.r_[v_outputs[i], b_v_outputs[i]]
+                                v_outputs[i] = np.r_[v_outputs[i], b_v_outputs[i][0:actual_length]]
                         else:
-                            v_outputs = np.r_[v_outputs, b_v_outputs]
+                            v_outputs = np.r_[v_outputs, b_v_outputs[0:actual_length]]
             v_loss = np.mean(np.array(v_loss))
             if v_metrics is not None:
                 if isinstance(self.metrics, list):
@@ -184,7 +189,7 @@ class ModelModule:
             else:
                 raise RuntimeError("evaluation:the model not be train or not save with giving a model_save_path")
         try:
-            length = self.__getfeedlength(test_inputs_feed)
+            length = self.__get_feed_length(test_inputs_feed)
         except RuntimeError as e:
             raise RuntimeError("evaluation:" + e)
 
@@ -216,6 +221,11 @@ class ModelModule:
                     test_metrics = np.r_[test_metrics, b_test_metrics]
             if return_outputs:
                 b_test_outputs = sess.run(self.outputs, feed_dict=feed)
+                if isinstance(self.outputs, list):
+                    for i in range(len(self.outputs)):
+                        b_test_outputs[i] = b_test_outputs[i][0:actual_length]
+                else:
+                    b_test_outputs = b_test_outputs[0:actual_length]
                 if test_outputs is None:
                     test_outputs = b_test_outputs
                 else:
@@ -257,7 +267,7 @@ class ModelModule:
             else:
                 raise RuntimeError("predict: the model not be train or not save with giving a model_save_path")
         try:
-            length = self.__getfeedlength(inputs_feed)
+            length = self.__get_feed_length(inputs_feed)
         except RuntimeError as e:
             raise RuntimeError("predict:" + e)
         predict_outputs = None
@@ -269,14 +279,24 @@ class ModelModule:
                 feed = self.__feed(batch_inputs_feed, None, net_configs_feed=net_configs_feed)
             except RuntimeError as e:
                 raise RuntimeError("predict:" + e)
-            if predict_outputs is None:
-                predict_outputs = sess.run(self.outputs, feed_dict=feed)[0:actual_length]
+            predict_output = sess.run(self.outputs, feed_dict=feed)
+            if isinstance(self.outputs, list):
+                for i in range(len(self.outputs)):
+                    predict_output[i] = predict_output[i][0:actual_length]
             else:
-                predict_outputs = np.r_[predict_outputs, sess.run(self.outputs, feed_dict=feed)[0:actual_length]]
+                predict_output = predict_output[0:actual_length]
+            if predict_outputs is None:
+                predict_outputs = predict_output
+            else:
+                if isinstance(self.outputs, list):
+                    for i in range(len(self.outputs)):
+                        predict_outputs[i] = np.r_[predict_outputs[i], predict_output[i]]
+                else:
+                    predict_outputs = np.r_[predict_outputs, predict_output]
         result["predict"] = predict_outputs
         return result
 
-    def __getfeedlength(self, inputs_feed):
+    def __get_feed_length(self, inputs_feed):
         if isinstance(self.inputs, list):
             if isinstance(inputs_feed[0], list):
                 length = len(inputs_feed[0])
