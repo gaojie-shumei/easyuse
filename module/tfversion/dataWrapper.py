@@ -90,15 +90,16 @@ class TFDataWrapper:
         super(TFDataWrapper, self).__init__()
 
     def wrapper(self, all_features: List[InputFeatures], batch_size, gpu_num=0, is_train=True,
-                drop_remainder=False)->tf.data.Dataset:
+                drop_remainder=False, num_parallel_calls=None):
         '''
         :param all_features: the all data for network
         :param batch_size: batch size
         :param gpu_num: if use multi gpu, this should provide
         :param is_train:  is train set or not
         :param drop_remainder:  if len(all_features)%batch_size!=0, drop the next data or not
+        :param num_parallel_calls: the data process with thread,if None,one thread
         :return:
-            tf.data.Dataset,data with tensor,iterator
+            tf.data.Dataset,data with tensor,iterator_init
         '''
         if gpu_num>0:
             batch_size = batch_size*gpu_num
@@ -141,6 +142,7 @@ class TFDataWrapper:
         if is_train:
             tf_data = tf_data.repeat()
             tf_data = tf_data.shuffle(buffer_size=100)
+        tf_data = tf_data.map(lambda x:x,num_parallel_calls)
         try:
             tf_data = tf_data.batch(batch_size,drop_remainder)
         except:
@@ -253,14 +255,15 @@ class TFRecordWrapper:
             sample[name] = t
         return sample
 
-    def read(self, is_train: bool, batch_size, gpu_num=0, drop_remainder=False):
+    def read(self, is_train: bool, batch_size, gpu_num=0, drop_remainder=False,num_parallel_calls=None):
         '''
         :param is_train: is train set or not,if is train set, it will be repeat and shuffle
         :param batch_size: batch size for cpu or one GPU
         :param gpu_num: if use gpu to train or test or evalution, it should provide
         :param drop_remainder:  if the set is less than batch_size or batch_size*gpu_num,drop it or not
+        :param num_parallel_calls: the data process with thread,if None,one thread
         :return:
-            tf.data.Dataset,data with tensor,iterator
+            tf.data.Dataset,data with tensor,iterator_init
         '''
         if gpu_num > 0:
             batch_size = batch_size*gpu_num
@@ -269,7 +272,7 @@ class TFRecordWrapper:
             tf_record = tf_record.repeat()
             tf_record = tf_record.shuffle(buffer_size=100)
 
-        tf_record = tf_record.map(lambda record: self.__decode_record(record))
+        tf_record = tf_record.map(lambda record: self.__decode_record(record),num_parallel_calls)
         try:
             tf_record = tf_record.batch(batch_size, drop_remainder)
         except:
