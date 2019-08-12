@@ -73,7 +73,7 @@ class ModelModule:
 
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
                   v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
-                  return_outputs=False):
+                  return_outputs=False,do_validation=False):
         '''
 
         :param sess:  a tf.Session for train
@@ -85,10 +85,11 @@ class ModelModule:
         :param v_net_configs_feed: same with tr_net_configs_feed ,but for validation
         :param batch_size: this batch_size only for validation
         :param return_outputs: return the outputs or not
+        :param do_validation: do validation or not
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
-            the validation if exist                             'v_loss','v_metrics','v_outputs'
+            the validation if exist and do_validation is True   'v_loss','v_metrics','v_outputs'
         '''
         result = {}
         try:
@@ -106,7 +107,7 @@ class ModelModule:
             tr_outputs = sess.run(self.outputs, feed_dict=feed)
             result["tr_outputs"] = tr_outputs
         result["tr_loss"] = tr_loss
-        if v_inputs_feed is not None and v_outputs_feed is not None:
+        if v_inputs_feed is not None and v_outputs_feed is not None and do_validation:
             try:
                 length = self.__get_feed_length(v_inputs_feed)
             except RuntimeError as e:

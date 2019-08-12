@@ -147,7 +147,8 @@ class TFDataWrapper:
             tf_data = tf_data.batch(batch_size)
         it = tf_data.make_initializable_iterator()
         data = it.get_next()
-        return tf_data, data, it
+        iterator_init = it.initializer
+        return tf_data, data, iterator_init
 
     def __call__(self, all_features: List[InputFeatures], batch_size, gpu_num=0, is_train=True,
                  drop_remainder=False)->tf.data.Dataset:
@@ -275,4 +276,5 @@ class TFRecordWrapper:
             tf_record = tf_record.batch(batch_size)
         it = tf_record.make_initializable_iterator()
         data = it.get_next()
-        return tf_record, data, it
+        iterator_init = it.initializer
+        return tf_record, data, iterator_init
