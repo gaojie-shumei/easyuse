@@ -445,6 +445,57 @@ def entityType(namelabels, organizationlabels, whenlabels, wherelabels, target):
         return "none"
 
 
+def count_len_with_word(classification_path,ner_path):
+    df = pd.read_json(classification_path,orient="records", lines=True)
+    max_len = None
+    min_len = None
+    all_len = 0
+    data = np.array(df["text"])
+    count = data.shape[0]
+    count_max_200 = 0
+    for i in range(data.shape[0]):
+        length = len(data[i].split(" "))
+        if max_len is None:
+            max_len = length
+        else:
+            if length > max_len:
+                max_len = length
+        if min_len is None:
+            min_len = length
+        else:
+            if length < min_len:
+                min_len = length
+        all_len += length
+        if length > 200:
+            count_max_200 += 1
+
+    df = pd.read_json(ner_path, orient="records", lines=True)
+    data = np.array(df["text"])
+    count += data.shape[0]
+    for i in range(data.shape[0]):
+        if isinstance(data[i], list):
+            length = len(data[i])
+        elif isinstance(data[i],np.ndarray):
+            length = data[i].shape[0]
+        else:
+            length = len(data[i].split(" "))
+        if max_len is None:
+            max_len = length
+        else:
+            if length > max_len:
+                max_len = length
+        if min_len is None:
+            min_len = length
+        else:
+            if length < min_len:
+                min_len = length
+        all_len += length
+        if length > 200:
+            count_max_200 += 1
+    avg_len = all_len // count
+    print("min_len=",min_len,",max_len=",max_len)
+    print("avg_len=", avg_len, ",count_max_200=",count_max_200, ",count_min_200=",count-count_max_200)
+
 def main():
     #base_dir = "C:/Users/gaojiexcq/Desktop/数据处理/2019-7-12"
     # base_dir = "E:/text_cla/dataset"
@@ -466,7 +517,7 @@ def main():
                                                         "D:/数据/数据处理结果/info/nerinfo/nerinfo0731.txt",
                                                         isCharSplit=False)
     print("ner text split with space or char and count_max_512=", count_max_512)
-
+    count_len_with_word("D:/数据/数据处理结果/data/classification.json", "D:/数据/数据处理结果/data/ner.json")
 
     # for info in info_list:
     #     print(info)
