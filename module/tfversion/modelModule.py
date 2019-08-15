@@ -67,8 +67,8 @@ class ModelModule:
         return self._metrics
 
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
-                  v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
-                  return_outputs=False, show_result=True):
+            v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,return_outputs=False,
+            show_result=True, start_save_model_epoch=None):
         '''
 
         :param sess:  a tf.Session for train
@@ -82,6 +82,7 @@ class ModelModule:
         :param batch_size: this batch_size only for validation
         :param return_outputs: return the outputs or not
         :param show_result: one epoch to show result in console
+        :param start_save_model_epoch: which epoch to save model
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
@@ -89,10 +90,14 @@ class ModelModule:
         '''
         results = []
         for i in range(epoch):
+            save_model = False
+            if i >= start_save_model_epoch:
+                save_model = True
             generator = self.__generator_batch(batch_size, tr_inputs_feed, tr_outputs_feed, shuffle=True)
             for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
                 result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                                        v_outputs_feed, v_net_configs_feed,batch_size, return_outputs, is_one_epoch)
+                                        v_outputs_feed, v_net_configs_feed,batch_size, return_outputs, is_one_epoch,
+                                        save_model)
                 if is_one_epoch:
                     results.append(result)
                     if show_result:
@@ -101,7 +106,7 @@ class ModelModule:
 
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
                   v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
-                  return_outputs=False, do_validation=False):
+                  return_outputs=False, do_validation=False, save_model=False):
         '''
 
         :param sess:  a tf.Session for train
@@ -114,12 +119,14 @@ class ModelModule:
         :param batch_size: this batch_size only for validation
         :param return_outputs: return the outputs or not
         :param do_validation: do validation or not
+        :param save_model: True save model, False not
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
             the validation if exist and do_validation is True   'v_loss','v_metrics','v_outputs'
         '''
         result = {}
+        global_step = tf.train.get_or_create_global_step()
         feed = self.__feed(tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed)
         sess.run(self.train_ops, feed_dict=feed)
         if self.metrics is not None:
@@ -193,6 +200,9 @@ class ModelModule:
                 result["v_metrics"] = v_metrics
             if return_outputs:
                 result["v_outputs"] = v_outputs
+        if save_model and self.model_save_path is not None:
+            saver = tf.train.Saver()
+            saver.save(sess, self.model_save_path, global_step=global_step)
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
