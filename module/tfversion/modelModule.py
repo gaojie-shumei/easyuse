@@ -2,6 +2,7 @@ from typing import Union, List
 import tensorflow as tf
 import numpy as np
 import random
+from os import path as os_path
 from datetime import datetime
 
 class ModelModule:
@@ -68,7 +69,7 @@ class ModelModule:
 
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
             v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,return_outputs=False,
-            show_result=True, start_save_model_epoch=None):
+            show_result=True, start_save_model_epoch=None, model_name='model'):
         '''
 
         :param sess:  a tf.Session for train
@@ -83,6 +84,7 @@ class ModelModule:
         :param return_outputs: return the outputs or not
         :param show_result: one epoch to show result in console
         :param start_save_model_epoch: which epoch to save model
+        :param model_name: model_name  'model' is the default
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
@@ -97,7 +99,7 @@ class ModelModule:
             for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
                 result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed, v_inputs_feed,
                                         v_outputs_feed, v_net_configs_feed,batch_size, return_outputs, is_one_epoch,
-                                        save_model)
+                                        save_model, model_name)
                 if is_one_epoch:
                     results.append(result)
                     if show_result:
@@ -106,7 +108,7 @@ class ModelModule:
 
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
                   v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
-                  return_outputs=False, do_validation=False, save_model=False):
+                  return_outputs=False, do_validation=False, save_model=False, model_name='model'):
         '''
 
         :param sess:  a tf.Session for train
@@ -120,6 +122,7 @@ class ModelModule:
         :param return_outputs: return the outputs or not
         :param do_validation: do validation or not
         :param save_model: True save model, False not
+        :param model_name: model name 'model' as the default
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
@@ -202,7 +205,7 @@ class ModelModule:
                 result["v_outputs"] = v_outputs
         if save_model and self.model_save_path is not None:
             saver = tf.train.Saver()
-            saver.save(sess, self.model_save_path, global_step=global_step)
+            saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"), global_step=global_step)
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
@@ -223,8 +226,11 @@ class ModelModule:
         if is_in_train:
             pass
         elif self.model_save_path is not None:
-            saver = tf.train.Saver()
-            saver.restore(sess, self.model_save_path)
+            if tf.train.latest_checkpoint(self.model_save_path) is not None:
+                saver = tf.train.Saver()
+                saver.restore(sess, tf.train.latest_checkpoint(self.model_save_path))
+            else:
+                raise RuntimeError("evaluation:the model not save")
         else:
             raise RuntimeError("evaluation:the model not be train or not save with giving a model_save_path")
         test_loss, test_metrics, test_outputs, count = 0, None, None, 0
@@ -295,10 +301,13 @@ class ModelModule:
         if is_in_train:
             pass
         elif self.model_save_path is not None:
-            saver = tf.train.Saver()
-            saver.restore(sess, self.model_save_path)
+            if tf.train.latest_checkpoint(self.model_save_path) is not None:
+                saver = tf.train.Saver()
+                saver.restore(sess, tf.train.latest_checkpoint(self.model_save_path))
+            else:
+                raise RuntimeError("predict:the model not save")
         else:
-            raise RuntimeError("evaluation:the model not be train or not save with giving a model_save_path")
+            raise RuntimeError("predict:the model not be train or not save with giving a model_save_path")
         predict_outputs = None
         generator = self.__generator_batch(batch_size, inputs_feed)
         for batch_inputs_feed, _, batch_len, _ in generator:
