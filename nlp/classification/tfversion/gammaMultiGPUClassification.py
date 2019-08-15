@@ -1,8 +1,9 @@
 from module.tfversion import baseNet, modelModule
 import tensorflow as tf
-from bert import modeling,tokenization
+from bert import modeling,tokenization, optimization
 from nlp.classification.generateData import *
 import os
+import datetime
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  #只显示error
 
 
@@ -83,7 +84,8 @@ def average_gradients(tower_grads):
     return average_grads
 
 
-def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
+
+def class_model(device=None, reuse=tf.AUTO_REUSE, gpunum=0):
     if device is None:
         device = "/cpu:0"
     with tf.device(device), tf.variable_scope("", reuse=reuse):
@@ -96,7 +98,15 @@ def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
         y = tf.placeholder("float", shape=[None, output_size], name="y")
         is_train = tf.keras.backend.learning_phase()  #1 for train 0 for test
         lr = tf.placeholder("float")
-        optimizer = tf.train.AdamOptimizer(lr)
+        global_step = tf.train.get_or_create_global_step()
+        learning_rate = tf.train.polynomial_decay(lr, global_step, 10000)
+        optimizer = optimization.AdamWeightDecayOptimizer(
+            learning_rate=learning_rate,
+            weight_decay_rate=0.005,
+            beta_1=0.9,
+            beta_2=0.999,
+            epsilon=1e-6,
+            exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
         bert_config = modeling.BertConfig.from_json_file(bert_model_base_dir+"/bert_config.json")
         net = GammaClassNet(lstm_units, l2_scale, drop_rate, output_size, use_bert)
         if gpunum != 0:
@@ -109,7 +119,7 @@ def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
             _y = tf.split(y, gpunum, axis=0)
             output, tower_grad, loss = [], [], []
             for i in range(gpunum):
-                with tf.device("/gpu:%d"%(gpu_start+i)):
+                with tf.device("/gpu:%d"%(i)):
                     if use_bert:
                         net_inputs = {
                             "bert_config": bert_config,
@@ -134,7 +144,10 @@ def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
             loss = tf.reduce_mean(loss)
             output = tf.concat(output, axis=0)
             grad_and_vars = average_gradients(tower_grad)
-            accuracy = tf.reduce_mean(tf.keras.metrics.categorical_accuracy(y, output))
+            # grads_and_vars = zip(*grad_and_vars)
+            # (grads, _) = tf.clip_by_global_norm(grads_and_vars[0], clip_norm=1.0)
+            # grad_and_vars = zip(grads, grads_and_vars[1])
+            accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(y, axis=-1), tf.argmax(output, axis=-1)), "float"))
         else:
             if use_bert:
                 net_inputs = {
@@ -153,7 +166,7 @@ def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
             output = outputs["output"]
             bert_vars = outputs["bert_vars"]
             loss = tf.reduce_mean(-tf.pow(tf.abs((y - output)), 2)*tf.log(output))
-            accuracy = tf.reduce_mean(tf.keras.metrics.categorical_accuracy(y, output))
+            accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(y, axis=-1), tf.argmax(output, axis=-1)), "float"))
             grad_and_vars = None
 
         if use_bert:
@@ -164,15 +177,23 @@ def class_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpunum=0):
         model_y = y
         net_configs = [lr, is_train]
         if grad_and_vars is not None:
-            train_ops = optimizer.apply_gradients(grad_and_vars)
+            train_ops = optimizer.apply_gradients(grad_and_vars, global_step=global_step)
         else:
-            train_ops = optimizer.minimize(loss)
-    model = modelModule.ModelModule(model_inputs, model_outputs, model_y, loss, train_ops, net_configs, None, accuracy)
+            train_ops = optimizer.minimize(loss, global_step=global_step)
+    tvars = tf.global_variables()
+    initialized_variable_names = {}
+    (assignment_map,
+     initialized_variable_names) = modeling.get_assignment_map_from_checkpoint(tvars,
+                                                                               bert_model_base_dir+"/bert_model.ckpt")
+    print(initialized_variable_names)
+    tf.train.init_from_checkpoint(bert_model_base_dir+"/bert_model.ckpt", assignment_map)
+    model = modelModule.ModelModule(model_inputs, model_outputs, model_y, loss, train_ops, net_configs,
+                                    None, accuracy,gpunum)
     return model, bert_vars
 
 
-gpunum = 4
-model, bert_vars = class_model("/cpu:0", tf.AUTO_REUSE, gpu_start=0, gpunum=gpunum)
+gpunum = 8
+model, bert_vars = class_model("/cpu:0", tf.AUTO_REUSE, gpunum=gpunum)
 
 
 def train(train_text, train_label, test_text, test_label, train_num, learning_rate, batch_size):
@@ -187,8 +208,8 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         v_inputs_feed = [test_input_ids, test_input_mask, test_segment_ids]
         v_outputs_feed = test_label
         v_net_configs_feed = [learning_rate, 0]
-        if bert_vars is not None:
-            restore_saver = tf.train.Saver(bert_vars)
+        # if bert_vars is not None:
+        #     restore_saver = tf.train.Saver(bert_vars)
         saver = tf.train.Saver()
         init = tf.global_variables_initializer()
         config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.8),
@@ -196,30 +217,30 @@ def train(train_text, train_label, test_text, test_label, train_num, learning_ra
         with tf.Session(config=config) as sess:
             print("tf.Session()")
             sess.run(init)
-            if bert_vars is not None:
-                restore_saver.restore(sess, bert_model_base_dir + "/bert_model.ckpt")
-            print("restore saver")
+            # if bert_vars is not None:
+            #     restore_saver.restore(sess, bert_model_base_dir + "/bert_model.ckpt")
+            # print("restore saver")
             step = 0
             for i in range(train_num):
                 if gpunum != 0:
-                    generator = generator_batch(batch_size*gpunum, train_text, train_label)
+                    batch_size1 = batch_size*gpunum
                 else:
-                    generator = generator_batch(batch_size, train_text, train_label)
-                for batch_x, batch_y in generator:
-                    # if i == 0:
-                    # print("batch")
-                    # train_text, train_label, batch_x, batch_y, position = next_batch(batch_size, train_text, train_label,
-                    #                                                                  position)
+                    batch_size1 = batch_size
+                generator = generator_batch(batch_size1, train_text, train_label)
+                for batch_x, batch_y,flag in generator:
                     batch_y = tf.keras.utils.to_categorical(batch_y, output_size)
                     batch_input_ids, batch_input_mask, batch_segment_ids, _ = convert_batch_data(batch_x, tokenizer)
                     tr_inputs_feed = [batch_input_ids, batch_input_mask, batch_segment_ids]
                     tr_net_configs_feed = [learning_rate, 1]
-                    # if i == 0:
-                    # print("batch fit start")
+                    # start = datetime.datetime.now()
+                    do_validation = False
+                    if flag==1:
+                        do_validation = True
                     result = model.batch_fit(sess, tr_inputs_feed, batch_y, tr_net_configs_feed, v_inputs_feed,
-                                             v_outputs_feed, v_net_configs_feed, batch_size)
-                    # if i == 0:
-                    # print("batch fit end")
+                                             v_outputs_feed, v_net_configs_feed, batch_size,
+                                             do_validation=do_validation)
+                    # end = datetime.datetime.now()
+                    # print("batch fit time=", (end-start).total_seconds())
                     if step % 25 == 0:
                         print("i={},step={},result={}".format(i, step, result))
                     step += 1
@@ -241,8 +262,8 @@ def main():
                                                                               keyword_path=keyword_path)
     print(len(train_label), len(test_label))
     train_num = 100
-    learning_rate = 0.0005
-    batch_size = 8
+    learning_rate = 1e-4
+    batch_size = 10
     train(train_text, train_label, test_text, test_label, train_num, learning_rate, batch_size)
 
 if __name__ == '__main__':

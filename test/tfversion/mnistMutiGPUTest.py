@@ -29,7 +29,7 @@ def average_gradients(tower_grads):
     return average_grads
 
 
-def mnist_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpu_num=0):
+def mnist_model(device=None, reuse=tf.AUTO_REUSE, gpu_num=0):
     if device is None:
         device = "/cpu:0"
     with tf.device(device), tf.variable_scope("", reuse=reuse):
@@ -48,7 +48,7 @@ def mnist_model(device=None, reuse=tf.AUTO_REUSE, gpu_start=0, gpu_num=0):
                     split_num -= 1
             output, loss, tower_grads = [], [], []
             for i in range(split_num):
-                with tf.device("/gpu:%d"%(gpu_start+i)):
+                with tf.device("/gpu:%d"%(i)):
                     _output = net({"input": _x[i]})
                     output.append(_output)
                     _loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(_y[i], _output))
