@@ -19,13 +19,13 @@ is_real_sample = tf.placeholder(tf.int32, shape=[None], name="is_real_sample")
 y = tf.placeholder(tf.int32,shape=[None],name="y")
 
 
-def model():
+def mnist_model():
     out = tf.layers.dense(x, 128, activation=tf.nn.relu)
     out = tf.layers.dense(out, 10, activation=tf.nn.softmax)
     return out
 
 
-out = model()
+out = mnist_model()
 loss = tf.losses.sparse_softmax_cross_entropy(y[tf.equal(is_real_sample, tf.constant(1))],
                                               out[tf.equal(is_real_sample, tf.constant(1))])
 acc = tf.reduce_mean(tf.cast(tf.equal(y[tf.equal(is_real_sample, tf.constant(1))],
@@ -53,12 +53,19 @@ def train(x_train,y_train,x_test,y_test,train_num,learning_rate,batch_size):
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         train_ops = tf.train.AdamOptimizer(learning_rate).minimize(loss)
     init = tf.global_variables_initializer()
-    model = modelModule.ModelModule([x, is_real_sample], out, y, loss, train_ops, None, None, acc, 0)
+    model = modelModule.ModelModule([x, is_real_sample], out, y, loss, train_ops, None, "", acc, 0)
     with tf.Session() as sess:
         sess.run(init)
         model.fit(sess, train_num, [train_data["x"], train_data["is_real_sample"]], train_data["y"], None,
                   [test_data["x"], test_data["is_real_sample"]], test_data["y"],None, batch_size, False, True,
-                  None, None, train_init, test_init)
+                  10, "model", train_init, test_init)
+        result = model.evaluation(sess, [test_data["x"], test_data["is_real_sample"]], test_data["y"], None, batch_size, True,
+                                  False, test_init)
+        print(result)
+        result = model.predict(sess, [test_data["x"], test_data["is_real_sample"]],None, batch_size, True,test_init)
+        result["predict"] = np.argmax(result["predict"],axis=-1)
+        print("predict=", result["predict"][0:20])
+        print("      y=", y_test[0:20])
         # j = 0
         # for i in range(train_num):
         #     sess.run(train_init)
@@ -89,6 +96,7 @@ def train(x_train,y_train,x_test,y_test,train_num,learning_rate,batch_size):
             #         print(i,j,tr_loss,tr_acc,v_loss,v_acc)
             #     j += 1
             # print(i,j,tr_loss,tr_acc,v_loss,v_acc)
+    return model
 
 
 
@@ -104,7 +112,7 @@ def main():
     print(y_train.dtype, y_test.dtype)
     y_train = y_train.astype(np.int32)
     y_test = y_test.astype(np.int32)
-    train(x_train, y_train, x_test, y_test, train_num=100, learning_rate=0.0005, batch_size=128)
+    train(x_train, y_train, x_test, y_test, train_num=10, learning_rate=0.0005, batch_size=128)
 
 
 if __name__ == '__main__':
