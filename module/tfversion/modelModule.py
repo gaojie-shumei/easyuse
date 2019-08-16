@@ -442,7 +442,6 @@ class ModelModule:
             return np.array(data)
         else:
             raise TypeError("only support list and numpy.ndarray type")
-        return data
 
     def __type2batch(self, self_placeholder, feed_data, position, batch_size):
         '''
