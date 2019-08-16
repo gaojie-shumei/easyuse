@@ -112,7 +112,7 @@ def main():
     print(y_train.dtype, y_test.dtype)
     y_train = y_train.astype(np.int32)
     y_test = y_test.astype(np.int32)
-    train(x_train, y_train, x_test, y_test, train_num=10, learning_rate=0.0005, batch_size=128)
+    train(x_train, y_train, x_test, y_test, train_num=100, learning_rate=0.0005, batch_size=128)
 
 
 if __name__ == '__main__':
