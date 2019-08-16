@@ -3,10 +3,11 @@ from typing import List, Union, Dict
 import os.path as ospath
 import collections
 import numpy as np
-
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class InputSample:
-    def __init__(self, guid,input_x: Dict, input_y: Dict=None):
+    def __init__(self, guid, input_x: Dict, input_y: Dict=None):
         '''
         :param guid: for unique the sample
         :param input_x: the sample data, e.g:{key:value,key:value}
@@ -21,23 +22,15 @@ class InputSample:
         self.input_y = input_y
 
 
-class PadSample:
-    '''
-    if a sample class is PadSample
-        this sample is only for batch pad, if the real_sample num less than batch size, this class will be used
-    '''
-    def __int__(self, pad_value):
-        self.pad_value = pad_value
-
-
 class FeatureTypingFunctions:
-    def __init__(self, x_fns: Dict, name_to_features: Dict[str, Union[tf.FixedLenFeature, tf.VarLenFeature,
-                                                            tf.FixedLenSequenceFeature, tf.SparseFeature]],
-                 y_fns: Dict=None, is_real_sample_fn=None):
+    def __init__(self, x_fns: Dict, name_to_features: Dict, y_fns: Dict=None, is_real_sample_fn=None):
         '''
         :param x_fns:  the x_fns should be a Dict with same key to net_x in InputFeatures, x_fns value should be in
                         [int64_feature, float_feature, bytes_feature]
-        :param name_to_features:
+        :param name_to_features: type is Dict[str, Union[tf.FixedLenFeature, tf.VarLenFeature,
+                                                         tf.FixedLenSequenceFeature, tf.SparseFeature,
+                                                         tf.io.FixedLenFeature, tf.io.VarLenFeature,
+                                                         tf.io.FixedLenSequenceFeature, tf.io.SparseFeature]]
         :param y_fns: same to x_fns
         :param is_real_sample_fn: a function in [int64_feature, float_feature, bytes_feature]
         '''
@@ -50,6 +43,11 @@ class FeatureTypingFunctions:
         self.x_fns = x_fns
         self.y_fns = y_fns
         self.is_real_sample_fn = is_real_sample_fn
+        if "is_real_sample" not in name_to_features:
+            try:
+                name_to_features["is_real_sample"] = tf.io.FixedLenFeature(shape=[], dtype=tf.int64)
+            except:
+                name_to_features["is_real_sample"] = tf.FixedLenFeature(shape=[], dtype=tf.int64)
         self.name_to_features = name_to_features
 
     @classmethod
@@ -66,7 +64,6 @@ class FeatureTypingFunctions:
     def bytes_feature(cls, values):
         f = tf.train.Feature(bytes_list=tf.train.BytesList(value=list(values)))
         return f
-
 
 
 class InputFeatures:
@@ -89,42 +86,66 @@ class TFDataWrapper:
     def __init__(self):
         super(TFDataWrapper, self).__init__()
 
-    def wrapper(self, all_features: List[InputFeatures], batch_size, gpu_num=0, is_train=True,
+    @staticmethod
+    def wrapper(all_features: List[InputFeatures], batch_size, is_train=True,
                 drop_remainder=False, num_parallel_calls=None):
         '''
         :param all_features: the all data for network
         :param batch_size: batch size
-        :param gpu_num: if use multi gpu, this should provide
         :param is_train:  is train set or not
         :param drop_remainder:  if len(all_features)%batch_size!=0, drop the next data or not
         :param num_parallel_calls: the data process with thread,if None,one thread
         :return:
             tf.data.Dataset,data with tensor,iterator_init
         '''
-        if gpu_num>0:
-            batch_size = batch_size*gpu_num
+        if num_parallel_calls is not None and num_parallel_calls > 0:
+            batch_size = batch_size * num_parallel_calls
         net_data = {}
-        for f in all_features:
-            for x_key in f.net_x:
-                if x_key in net_data:
-                    net_data[x_key].append(f.net_x[x_key])
+        if len(all_features) % batch_size != 0:
+            res = batch_size - len(all_features) % batch_size
+        else:
+            res = 0
+        for i in range(len(all_features) + res):
+            if i < len(all_features):
+                f = all_features[i]
+                for x_key in f.net_x:
+                    if x_key in net_data:
+                        net_data[x_key].append(f.net_x[x_key])
+                    else:
+                        net_data[x_key] = []
+                        net_data[x_key].append(f.net_x[x_key])
+                for y_key in f.net_y:
+                    if y_key in net_data:
+                        net_data[y_key].append(f.net_y[y_key])
+                    else:
+                        net_data[y_key] = []
+                        net_data[y_key].append(f.net_y[y_key])
+                if "is_real_sample" not in net_data:
+                    net_data["is_real_sample"] = []
+                    net_data["is_real_sample"].append(f.is_real_sample)
                 else:
-                    net_data[x_key] = []
-                    net_data[x_key].append(f.net_x[x_key])
-            for y_key in f.net_y:
-                if y_key in net_data:
-                    net_data[y_key].append(f.net_y[y_key])
-                else:
-                    net_data[y_key] = []
-                    net_data[y_key].append(f.net_y[y_key])
-            if "is_real_sample" not in net_data:
-                net_data["is_real_sample"] = []
-                net_data["is_real_sample"].append(f.is_real_sample)
+                    net_data["is_real_sample"].append(f.is_real_sample)
             else:
-                net_data["is_real_sample"].append(f.is_real_sample)
-        # num_samples = len(all_features)
+                f = all_features[i-len(all_features)]
+                for x_key in f.net_x:
+                    if x_key in net_data:
+                        net_data[x_key].append(f.net_x[x_key])
+                    else:
+                        net_data[x_key] = []
+                        net_data[x_key].append(f.net_x[x_key])
+                for y_key in f.net_y:
+                    if y_key in net_data:
+                        net_data[y_key].append(f.net_y[y_key])
+                    else:
+                        net_data[y_key] = []
+                        net_data[y_key].append(f.net_y[y_key])
+                if "is_real_sample" not in net_data:
+                    net_data["is_real_sample"] = []
+                    net_data["is_real_sample"].append(False)
+                else:
+                    net_data["is_real_sample"].append(False)
         for key in net_data:
-            shape = [len(all_features)]
+            shape = [(len(all_features) + res)]
             temp = net_data[key][0]
             if isinstance(temp, np.ndarray):
                 net_data[key] = np.array(net_data[key])
@@ -137,14 +158,17 @@ class TFDataWrapper:
                     while isinstance(temp, np.ndarray):
                         shape.append(temp.shape[0])
                         temp = temp[0]
-            net_data[key] = tf.constant(net_data[key],shape=shape)
+            net_data[key] = tf.constant(net_data[key], shape=shape)
         tf_data = tf.data.Dataset.from_tensor_slices(net_data)
         if is_train:
-            tf_data = tf_data.repeat()
+            # tf_data = tf_data.repeat()
             tf_data = tf_data.shuffle(buffer_size=100)
-        tf_data = tf_data.map(lambda x:x,num_parallel_calls)
         try:
-            tf_data = tf_data.batch(batch_size,drop_remainder)
+            tf_data = tf_data.map(lambda x: x, num_parallel_calls)
+        except:
+            tf_data = tf_data.map(lambda x: x)
+        try:
+            tf_data = tf_data.batch(batch_size, drop_remainder)
         except:
             tf_data = tf_data.batch(batch_size)
         it = tf_data.make_initializable_iterator()
@@ -152,10 +176,20 @@ class TFDataWrapper:
         iterator_init = it.initializer
         return tf_data, data, iterator_init
 
-    def __call__(self, all_features: List[InputFeatures], batch_size, gpu_num=0, is_train=True,
-                 drop_remainder=False)->tf.data.Dataset:
-        tf_data = self.wrapper(all_features,batch_size,gpu_num,is_train,drop_remainder)
-        return tf_data
+    def __call__(self, all_features: List[InputFeatures], batch_size, is_train=True,
+                drop_remainder=False, num_parallel_calls=None):
+        '''
+        :param all_features: the all data for network
+        :param batch_size: batch size
+        :param is_train:  is train set or not
+        :param drop_remainder:  if len(all_features)%batch_size!=0, drop the next data or not
+        :param num_parallel_calls: the data process with thread,if None,one thread
+        :return:
+            tf.data.Dataset,data with tensor,iterator_init
+        '''
+        tf_data, data, iterator_init = self.wrapper(all_features, batch_size, is_train, drop_remainder,
+                                                    num_parallel_calls)
+        return tf_data, data, iterator_init
 
 
 
@@ -186,61 +220,70 @@ class TFRecordWrapper:
         if feature_typing_fn is None:
             raise ValueError("feature_typing_fn should provide")
         self.feature_typing_fn = feature_typing_fn
-        self.writer = tf.python_io.TFRecordWriter(self.file_path)
+        self.writer = tf.io.TFRecordWriter(self.file_path)
 
-    def write(self, input_features: Union[InputFeatures, List[InputFeatures]], is_complete=True):
+    def __feature2dict(self, f):
+        features = collections.OrderedDict()
+        for x_key in f.net_x:
+            if isinstance(f.net_x[x_key], list):
+                features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key])
+            elif isinstance(f.net_x[x_key], np.ndarray):
+                features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key].tolist())
+            else:
+                features[x_key] = self.feature_typing_fn.x_fns[x_key]([f.net_x[x_key]])
+        for y_key in f.net_y:
+            if isinstance(f.net_y[y_key], list):
+                features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key])
+            elif isinstance(f.net_y[y_key], np.ndarray):
+                features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key].tolist())
+            else:
+                features[y_key] = self.feature_typing_fn.y_fns[y_key]([f.net_y[y_key]])
+        features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn([f.is_real_sample])
+        return features
+
+    def write(self, input_features: Union[InputFeatures, List[InputFeatures]], batch_size, num_of_data=0,
+              is_complete=True, num_parallel_calls=None):
         '''
         :param input_features: the sample(InputFeatures) list or one for to write to TFRecord
+        :param batch_size: batch size
+        :param num_of_data: the write data num
         :param is_complete:  TFRecord is complete
+        :param num_parallel_calls: the parallel nums, if None, one thread
         :return:
         '''
+        if num_parallel_calls is not None and num_parallel_calls > 0:
+            batch_size = batch_size * num_parallel_calls
         if self.writer is None:
-            writer = tf.python_io.TFRecordWriter(self.file_path)
+            writer = tf.io.TFRecordWriter(self.file_path)
             self.writer = writer
         else:
             writer = self.writer
         if isinstance(input_features, list):
             for f in input_features:
-                features = collections.OrderedDict()
-                for x_key in f.net_x:
-                    if isinstance(f.net_x[x_key], list):
-                        features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key])
-                    elif isinstance(f.net_x[x_key], np.ndarray):
-                        features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key].tolist())
-                    else:
-                        features[x_key] = self.feature_typing_fn.x_fns[x_key]([f.net_x[x_key]])
-                for y_key in f.net_y:
-                    if isinstance(f.net_y[y_key], list):
-                        features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key])
-                    elif isinstance(f.net_y[y_key], np.ndarray):
-                        features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key].tolist())
-                    else:
-                        features[y_key] = self.feature_typing_fn.y_fns[y_key]([f.net_y[y_key]])
-                features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn([f.is_real_sample])
+                features = self.__feature2dict(f)
                 tf_sample = tf.train.Example(features=tf.train.Features(feature=features))
                 writer.write(tf_sample.SerializeToString())
         else:
-            features = collections.OrderedDict()
-            for x_key in input_features.net_x:
-                if isinstance(input_features.net_x[x_key], list):
-                    features[x_key] = self.feature_typing_fn.x_fns[x_key](input_features.net_x[x_key])
-                elif isinstance(input_features.net_x[x_key], np.ndarray):
-                    features[x_key] = self.feature_typing_fn.x_fns[x_key](input_features.net_x[x_key].tolist())
-                else:
-                    features[x_key] = self.feature_typing_fn.x_fns[x_key]([input_features.net_x[x_key]])
-            for y_key in input_features.net_y:
-                if isinstance(input_features.net_y[y_key], list):
-                    features[y_key] = self.feature_typing_fn.y_fns[y_key](input_features.net_y[y_key])
-                elif isinstance(input_features.net_x[x_key], np.ndarray):
-                    features[y_key] = self.feature_typing_fn.y_fns[y_key](input_features.net_y[y_key].tolist())
-                else:
-                    features[y_key] = self.feature_typing_fn.y_fns[y_key]([input_features.net_y[y_key]])
-            features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn(input_features.is_real_sample)
+            features = self.__feature2dict(input_features)
             tf_sample = tf.train.Example(features=tf.train.Features(feature=features))
             writer.write(tf_sample.SerializeToString())
         if is_complete:
+            if num_of_data % batch_size != 0:
+                res = batch_size - num_of_data % batch_size
+            else:
+                res = 0
+            for i in range(res):
+                if isinstance(input_features, list):
+                    f = input_features[i % len(input_features)]
+                else:
+                    f = input_features
+                features = self.__feature2dict(f)
+                features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn([False])
+                tf_sample = tf.train.Example(features=tf.train.Features(feature=features))
+                writer.write(tf_sample.SerializeToString())
             writer.close()
             self.writer = None
+        return num_of_data
 
     def __decode_record(self, record):
         '''
@@ -255,24 +298,25 @@ class TFRecordWrapper:
             sample[name] = t
         return sample
 
-    def read(self, is_train: bool, batch_size, gpu_num=0, drop_remainder=False,num_parallel_calls=None):
+    def read(self, is_train: bool, batch_size, drop_remainder=False, num_parallel_calls=None):
         '''
         :param is_train: is train set or not,if is train set, it will be repeat and shuffle
         :param batch_size: batch size for cpu or one GPU
-        :param gpu_num: if use gpu to train or test or evalution, it should provide
         :param drop_remainder:  if the set is less than batch_size or batch_size*gpu_num,drop it or not
         :param num_parallel_calls: the data process with thread,if None,one thread
         :return:
             tf.data.Dataset,data with tensor,iterator_init
         '''
-        if gpu_num > 0:
-            batch_size = batch_size*gpu_num
+        if num_parallel_calls is not None and num_parallel_calls > 0:
+            batch_size = batch_size * num_parallel_calls
         tf_record = tf.data.TFRecordDataset(self.file_path)
         if is_train:
-            tf_record = tf_record.repeat()
+            # tf_record = tf_record.repeat()
             tf_record = tf_record.shuffle(buffer_size=100)
-
-        tf_record = tf_record.map(lambda record: self.__decode_record(record),num_parallel_calls)
+        try:
+            tf_record = tf_record.map(lambda record: self.__decode_record(record), num_parallel_calls)
+        except:
+            tf_record = tf_record.map(lambda record: self.__decode_record(record))
         try:
             tf_record = tf_record.batch(batch_size, drop_remainder)
         except:

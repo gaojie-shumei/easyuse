@@ -3,6 +3,8 @@ import tensorflow as tf
 import numpy as np
 import random
 from os import path as os_path
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class ModelModule:
@@ -69,7 +71,8 @@ class ModelModule:
 
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
             v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,return_outputs=False,
-            show_result=True, start_save_model_epoch=None, model_name='model'):
+            show_result=True, start_save_model_epoch=None, model_name='model', tr_tf_dataset_init=None,
+            v_tf_dataset_init=None):
         '''
 
         :param sess:  a tf.Session for train
@@ -85,30 +88,63 @@ class ModelModule:
         :param show_result: one epoch to show result in console
         :param start_save_model_epoch: which epoch to save model
         :param model_name: model_name  'model' is the default
+        :param tr_tf_dataset_init: if train data is tf.data.Dataset, this should provide
+        :param v_tf_dataset_init: if validation data is tf.data.Dataset, this should provide
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
             the validation if exist and do_validation is True   'v_loss','v_metrics','v_outputs'
         '''
         results = []
+        one_epoch_num = 0
+        if tr_tf_dataset_init is not None:
+            sess.run(tr_tf_dataset_init)
+            while True:
+                try:
+                    sess.run(tr_inputs_feed)
+                    one_epoch_num += 1
+                except tf.errors.OutOfRangeError:
+                    break
         for i in range(epoch):
             save_model = False
-            if i >= start_save_model_epoch:
+            if start_save_model_epoch is not None and i >= start_save_model_epoch:
                 save_model = True
-            generator = self.__generator_batch(batch_size, tr_inputs_feed, tr_outputs_feed, shuffle=True)
-            for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
-                result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                                        v_outputs_feed, v_net_configs_feed, batch_size, return_outputs, is_one_epoch,
-                                        save_model, model_name)
-                if is_one_epoch:
-                    results.append(result)
-                    if show_result:
-                        print("epoch=", i, ",result=", result)
+            if tr_tf_dataset_init is not None:
+                sess.run(tr_tf_dataset_init)
+                step = 0
+                while True:
+                    try:
+                        batch_inputs_feed, batch_outputs_feed = sess.run([tr_inputs_feed, tr_outputs_feed])
+                        step += 1
+                        if step == one_epoch_num:
+                            is_one_epoch = True
+                        else:
+                            is_one_epoch = False
+                        result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed,
+                                                v_inputs_feed, v_outputs_feed, v_net_configs_feed, batch_size,
+                                                return_outputs, is_one_epoch, save_model, model_name, v_tf_dataset_init)
+                        if is_one_epoch:
+                            results.append(result)
+                            if show_result:
+                                print("epoch=", i, ",result=", result)
+                    except tf.errors.OutOfRangeError:
+                        break
+            else:
+                generator = self.__generator_batch(batch_size, tr_inputs_feed, tr_outputs_feed, shuffle=True)
+                for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
+                    result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed,
+                                            v_inputs_feed,v_outputs_feed, v_net_configs_feed, batch_size,
+                                            return_outputs, is_one_epoch, save_model, model_name, v_tf_dataset_init)
+                    if is_one_epoch:
+                        results.append(result)
+                        if show_result:
+                            print("epoch=", i, ",result=", result)
         return results
 
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
                   v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
-                  return_outputs=False, do_validation=False, save_model=False, model_name='model'):
+                  return_outputs=False, do_validation=False, save_model=False, model_name='model',
+                  v_tf_dataset_init=None):
         '''
 
         :param sess:  a tf.Session for train
@@ -123,6 +159,7 @@ class ModelModule:
         :param do_validation: do validation or not
         :param save_model: True save model, False not
         :param model_name: model name 'model' as the default
+        :param v_tf_dataset_init: if validation data is tf.data.Dataset, this should provide
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
@@ -151,9 +188,23 @@ class ModelModule:
             if return_outputs:
                 result["tr_outputs"] = tr_run[1]
         if do_validation and v_inputs_feed is not None and v_outputs_feed is not None:
-            generator = self.__generator_batch(batch_size, v_inputs_feed, v_outputs_feed)
+            if v_tf_dataset_init is not None:
+                sess.run(v_tf_dataset_init)
+            else:
+                generator = self.__generator_batch(batch_size, v_inputs_feed, v_outputs_feed)
             v_loss, v_metrics, v_outputs, count = 0, None, None, 0
-            for batch_inputs_feed, batch_outputs_feed, batch_len, _ in generator:
+            while True:
+                if v_tf_dataset_init is not None:
+                    try:
+                        batch_inputs_feed, batch_outputs_feed = sess.run([v_inputs_feed, v_outputs_feed])
+                    except tf.errors.OutOfRangeError:
+                        break
+                    batch_len = self.__type2len(self.inputs, batch_inputs_feed)
+                else:
+                    try:
+                        batch_inputs_feed, batch_outputs_feed, batch_len, _ = next(generator)
+                    except StopIteration:
+                        break
                 feed = self.__feed(batch_inputs_feed, batch_outputs_feed, v_net_configs_feed)
                 if self.metrics is not None:
                     if return_outputs:
@@ -209,7 +260,7 @@ class ModelModule:
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
-                   batch_size=64, is_in_train=False, return_outputs=False):
+                   batch_size=64, is_in_train=False, return_outputs=False, test_tf_dataset_init=None):
         '''
         :param sess: tf.Session for test
         :param test_inputs_feed: same to batch_fit function's parameter of tr_inputs_feed
@@ -218,6 +269,7 @@ class ModelModule:
         :param batch_size: batch size
         :param is_in_train: is also train and only test it is correct
         :param return_outputs: return the outputs or not
+        :param test_tf_dataset_init: if test data is tf.data.Dataset, this should provide
         :return:
             a result dict of self.loss, if self.metrics is not None,self.metrics will append to result,if return_outputs
             is True, the self.outputs will be in result, the key is 'test_loss','test_metrics','test_outputs'
@@ -234,8 +286,22 @@ class ModelModule:
         else:
             raise RuntimeError("evaluation:the model not be train or not save with giving a model_save_path")
         test_loss, test_metrics, test_outputs, count = 0, None, None, 0
-        generator = self.__generator_batch(batch_size, test_inputs_feed, test_outputs_feed)
-        for batch_inputs_feed, batch_outputs_feed, batch_len, _ in generator:
+        if test_tf_dataset_init is not None:
+            sess.run(test_tf_dataset_init)
+        else:
+            generator = self.__generator_batch(batch_size, test_inputs_feed, test_outputs_feed)
+        while True:
+            if test_tf_dataset_init is not None:
+                try:
+                    batch_inputs_feed, batch_outputs_feed = sess.run([test_inputs_feed, test_outputs_feed])
+                except tf.errors.OutOfRangeError:
+                    break
+                batch_len = self.__type2len(self.inputs, batch_inputs_feed)
+            else:
+                try:
+                    batch_inputs_feed, batch_outputs_feed, batch_len, _ = next(generator)
+                except StopIteration:
+                    break
             feed = self.__feed(batch_inputs_feed, batch_outputs_feed, test_net_configs_feed)
             if self.metrics is not None:
                 if return_outputs:
@@ -287,13 +353,15 @@ class ModelModule:
             result["test_outputs"] = test_outputs
         return result
 
-    def predict(self, sess: tf.Session, inputs_feed, net_configs_feed=None, batch_size=64, is_in_train=False):
+    def predict(self, sess: tf.Session, inputs_feed, net_configs_feed=None, batch_size=64, is_in_train=False,
+                tf_dataset_init=None):
         '''
         :param sess: tf.Session
         :param inputs_feed: same to batch_fit function's parameter of tr_inputs_feed
         :param net_configs_feed: same to batch_fit function's parameter of tr_net_configs_feed
         :param batch_size: batch size
         :param is_in_train: is also train and only test it is correct
+        :param tf_dataset_init: if data is tf.data.Dataset, this should be provide
         :return:
             a result dict, the key is 'predict'
         '''
@@ -309,8 +377,22 @@ class ModelModule:
         else:
             raise RuntimeError("predict:the model not be train or not save with giving a model_save_path")
         predict_outputs = None
-        generator = self.__generator_batch(batch_size, inputs_feed)
-        for batch_inputs_feed, _, batch_len, _ in generator:
+        if tf_dataset_init is not None:
+            sess.run(tf_dataset_init)
+        else:
+            generator = self.__generator_batch(batch_size, inputs_feed)
+        while True:
+            if tf_dataset_init is not None:
+                try:
+                    batch_inputs_feed = sess.run(inputs_feed)
+                except tf.errors.OutOfRangeError:
+                    break
+                batch_len = self.__type2len(self.inputs, batch_inputs_feed)
+            else:
+                try:
+                    batch_inputs_feed, _, batch_len, _ = next(generator)
+                except StopIteration:
+                    break
             feed = self.__feed(batch_inputs_feed, None, net_configs_feed)
             outputs = sess.run(self.outputs, feed_dict=feed)
             if (self.num_parallel_calls > 0 and batch_size * self.num_parallel_calls != batch_len) or \
@@ -454,7 +536,7 @@ class ModelModule:
         '''
         batch_feed_data = []
         batch_len = batch_size
-        length = self.__type2len(self_placeholder,feed_data)
+        length = self.__type2len(self_placeholder, feed_data)
         if isinstance(self_placeholder, list):
             if position + batch_size > length:
                 batch_len = length - position
