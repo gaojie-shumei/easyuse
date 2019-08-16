@@ -51,6 +51,8 @@ with tf.device("/cpu:0"):
     gpu_num = 0
     lstm_units = 256
     learning_rate = 0.0005
+    model_save_path = "model"
+    model_name = "classification"
 
 
 def creat_model():
@@ -87,7 +89,8 @@ def creat_model():
         optimizer = tf.train.AdamOptimizer(learning_rate)
         train_ops = optimizer.minimize(loss)
         learn_mode = tf.keras.backend.learning_phase()
-        model = modelModule.ModelModule([x,lengths],out,y,loss,train_ops,learn_mode,metrics=acc,gpu_num=gpu_num)
+        model = modelModule.ModelModule([x,lengths],out,y,loss,train_ops,learn_mode,
+                                        model_save_path=model_save_path, metrics=acc, num_parallel_calls=gpu_num)
         return model
 
 
@@ -108,24 +111,32 @@ def train(train_data,train_label,test_data,test_label,datautil: nlpDataUtil.NLPD
                                 allow_soft_placement=True)
         with tf.Session(config=config) as sess:
             sess.run(init)
-            for i in range(train_num):
-                generator = generator_batch(batch_size, train_data, train_label,num_parallel_calls=gpu_num)
-                for batch_x,batch_y,flag in generator:
-                    pad_x,_,actual_lengths = datautil.padding(batch_x)
-                    batch_x,_ = datautil.format(pad_x)
-                    start = datetime.datetime.now()
-                    do_validation = False
-                    if flag == 1:
-                        do_validation = True
-                    tr_inputs_feed = [batch_x,actual_lengths]
-                    tr_outputs_feed = batch_y
-                    tr_net_configs_feed = 1
-                    result = model.batch_fit(sess, tr_inputs_feed,tr_outputs_feed,tr_net_configs_feed,v_inputs_feed,
-                                             v_outputs_feed,v_net_configs_feed,batch_size,do_validation=do_validation)
-                    if flag == 1:
-                        print("i=",i,",result=",result)
-                        end = datetime.datetime.now()
-                        print("batch fit time=",(end-start).total_seconds())
+            pad_x, _, actual_lengths = datautil.padding(train_data)
+            train_x, _ = datautil.format(pad_x)
+            tr_inputs_feed = [train_x, actual_lengths]
+            tr_outputs_feed = train_label
+            tr_net_configs_feed = 1
+            model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
+                      v_outputs_feed, v_net_configs_feed, batch_size, False, True, start_save_model_epoch=10,
+                      model_name=model_name)
+            # for i in range(train_num):
+            #     generator = generator_batch(batch_size, train_data, train_label,num_parallel_calls=gpu_num)
+            #     for batch_x,batch_y,flag in generator:
+            #         pad_x,_,actual_lengths = datautil.padding(batch_x)
+            #         batch_x,_ = datautil.format(pad_x)
+            #         start = datetime.datetime.now()
+            #         do_validation = False
+            #         if flag == 1:
+            #             do_validation = True
+            #         tr_inputs_feed = [batch_x,actual_lengths]
+            #         tr_outputs_feed = batch_y
+            #         tr_net_configs_feed = 1
+            #         result = model.batch_fit(sess, tr_inputs_feed,tr_outputs_feed,tr_net_configs_feed,v_inputs_feed,
+            #                                  v_outputs_feed,v_net_configs_feed,batch_size,do_validation=do_validation)
+            #         if flag == 1:
+            #             print("i=",i,",result=",result)
+            #             end = datetime.datetime.now()
+            #             print("batch fit time=",(end-start).total_seconds())
 
 
 

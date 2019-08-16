@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 import random
 from os import path as os_path
-from datetime import datetime
+
 
 class ModelModule:
     def __init__(self, inputs: Union[tf.Tensor, List[tf.Tensor]], outputs: Union[tf.Tensor, List[tf.Tensor]],
@@ -98,7 +98,7 @@ class ModelModule:
             generator = self.__generator_batch(batch_size, tr_inputs_feed, tr_outputs_feed, shuffle=True)
             for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
                 result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                                        v_outputs_feed, v_net_configs_feed,batch_size, return_outputs, is_one_epoch,
+                                        v_outputs_feed, v_net_configs_feed, batch_size, return_outputs, is_one_epoch,
                                         save_model, model_name)
                 if is_one_epoch:
                     results.append(result)
@@ -342,7 +342,8 @@ class ModelModule:
             feed.update(self.__type2feed(self.net_configs, net_configs_feed))
         return feed
 
-    def __type2feed(self, self_placeholder, feed_data):
+    @staticmethod
+    def __type2feed(self_placeholder, feed_data):
         '''
         :param self_placeholder:
         :param feed_data:
@@ -363,10 +364,12 @@ class ModelModule:
             raise RuntimeError("feed data error")
         return feed
 
-    def __type2mean(self, self_placeholder, result, iter):
+    @staticmethod
+    def __type2mean(self_placeholder, result, count):
         '''
         :param self_placeholder: mean of this placeholder
         :param result: result of this placeholder
+        :param count: the concat num
         :return:
             the mean result
         '''
@@ -374,10 +377,11 @@ class ModelModule:
             for i in range(len(self_placeholder)):
                 result[i] = np.mean(np.array(result[i]), axis=0)
         else:
-            result /= iter
+            result /= count
         return result
 
-    def __type2len(self, self_placeholder, feed_data):
+    @staticmethod
+    def __type2len(self_placeholder, feed_data):
         '''
         :param self_placeholder: the placeholder in self.inputs,self.standard_outputs,self.net_configs
         :param feed_data: the data feed to self_placeholder
@@ -400,7 +404,8 @@ class ModelModule:
                 raise TypeError("only support list and numpy.ndarray type")
         return length
 
-    def __type2concat(self, data1, data2):
+    @staticmethod
+    def __type2concat(data1, data2):
         '''
         :param data1: front data
         :param data2: rear data
@@ -425,7 +430,8 @@ class ModelModule:
             raise TypeError("only support list and numpy.ndarray")
         return data
 
-    def __type2clone(self, data):
+    @staticmethod
+    def __type2clone(data):
         '''
         :param data:
         :return: clone data
@@ -492,15 +498,15 @@ class ModelModule:
             shuffle_index = random.sample(range(length), length)
             if isinstance(self.inputs, list):
                 for i in range(len(self.inputs)):
-                    inputs_feed[i] = inputs_feed[i][shuffle_index]
+                    inputs_feed[i] = np.array(inputs_feed[i])[shuffle_index]
             else:
-                inputs_feed = inputs_feed[shuffle_index]
+                inputs_feed = np.array(inputs_feed)[shuffle_index]
             if outputs_feed is not None:
                 if isinstance(self.standard_outputs, list):
                     for i in range(len(self.standard_outputs)):
-                        outputs_feed[i] = outputs_feed[i][shuffle_index]
+                        outputs_feed[i] = np.array(outputs_feed[i])[shuffle_index]
                 else:
-                    outputs_feed = outputs_feed[shuffle_index]
+                    outputs_feed = np.array(outputs_feed)[shuffle_index]
         while position < length:
             batch_inputs_feed, batch_len = self.__type2batch(self.inputs, inputs_feed, position, batch_size)
             if outputs_feed is not None:
