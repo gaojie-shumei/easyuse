@@ -3,6 +3,7 @@ from nlp.classification.generateData import *
 import tensorflow as tf
 import tensorflow.contrib as tfc
 import os
+import json
 import datetime
 from module.tfversion import baseNet,modelModule
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  #只显示error
@@ -116,9 +117,12 @@ def train(train_data,train_label,test_data,test_label,datautil: nlpDataUtil.NLPD
             tr_inputs_feed = [train_x, actual_lengths]
             tr_outputs_feed = train_label
             tr_net_configs_feed = 1
-            model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                      v_outputs_feed, v_net_configs_feed, batch_size, False, True, start_save_model_epoch=10,
-                      model_name=model_name)
+            results = model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
+                               v_outputs_feed, v_net_configs_feed, batch_size, False, True, start_save_model_epoch=10,
+                               model_name=model_name)
+            with open("info.txt",mode="a+",encoding="utf-8") as f:
+                for result in results:
+                    f.write(json.dumps(result)+"\n")
             # for i in range(train_num):
             #     generator = generator_batch(batch_size, train_data, train_label,num_parallel_calls=gpu_num)
             #     for batch_x,batch_y,flag in generator:
