@@ -118,7 +118,7 @@ def train(train_data,train_label,test_data,test_label,datautil: nlpDataUtil.NLPD
             tr_outputs_feed = train_label
             tr_net_configs_feed = 1
             results = model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                               v_outputs_feed, v_net_configs_feed, batch_size, False, True, start_save_model_epoch=10,
+                               v_outputs_feed, v_net_configs_feed, batch_size, True, True, start_save_model_epoch=10,
                                model_name=model_name)
             with open("info.txt",mode="a+",encoding="utf-8") as f:
                 for result in results:

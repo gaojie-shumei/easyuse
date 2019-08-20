@@ -2,6 +2,8 @@ from typing import Union, List
 import tensorflow as tf
 import numpy as np
 import random
+import collections
+import re
 from os import path as os_path
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -68,6 +70,38 @@ class ModelModule:
     @property
     def metrics(self):
         return self._metrics
+
+    @staticmethod
+    def get_assignment_map_from_checkpoint(vars, init_checkpoint):
+        """Compute the union of the current variables and checkpoint variables."""
+        assignment_map = {}
+        initialized_variable_names = {}
+
+        name_to_variable = collections.OrderedDict()
+        for var in vars:
+            name = var.name
+            m = re.match("^(.*):\\d+$", name)
+            if m is not None:
+                name = m.group(1)
+            name_to_variable[name] = var
+
+        init_vars = tf.train.list_variables(init_checkpoint)
+
+        assignment_map = collections.OrderedDict()
+        for x in init_vars:
+            (name, var) = (x[0], x[1])
+            if name not in name_to_variable:
+                continue
+            assignment_map[name] = name
+            initialized_variable_names[name] = 1
+            initialized_variable_names[name + ":0"] = 1
+
+        return (assignment_map, initialized_variable_names)
+
+    def restore(self, model_path):
+        vars = tf.global_variables()
+        assignment_map, _ = self.get_assignment_map_from_checkpoint(vars, model_path)
+        tf.train.init_from_checkpoint(model_path, assignment_map)
 
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
             v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,return_outputs=False,
@@ -255,7 +289,7 @@ class ModelModule:
             if return_outputs:
                 result["v_outputs"] = v_outputs
         if save_model and self.model_save_path is not None:
-            saver = tf.train.Saver()
+            saver = tf.train.Saver(tf.global_variables())
             saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"), global_step=global_step)
         return result
 
