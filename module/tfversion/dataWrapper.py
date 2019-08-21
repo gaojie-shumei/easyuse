@@ -210,7 +210,7 @@ class TFDataWrapper:
 
 
 class TFRecordWrapper:
-    def __init__(self, file_path: str, feature_typing_fn: FeatureTypingFunctions):
+    def __init__(self, file_path: str, feature_typing_fn: FeatureTypingFunctions, need_write=True):
         '''
         :param file_path: TFRecord file path
         :param feature_typing_fn:a FeatureTypingFunctions for net_x,net_y,is_real_sample
@@ -222,10 +222,11 @@ class TFRecordWrapper:
         if feature_typing_fn is None:
             raise ValueError("feature_typing_fn should provide")
         self.feature_typing_fn = feature_typing_fn
-        try:
-            self.writer = tf.io.TFRecordWriter(self.file_path)
-        except:
-            self.writer = tf.python_io.TFRecordWriter(self.file_path)
+        if need_write:
+            try:
+                self.writer = tf.io.TFRecordWriter(self.file_path)
+            except:
+                self.writer = tf.python_io.TFRecordWriter(self.file_path)
 
     def __feature2dict(self, f):
         features = collections.OrderedDict()

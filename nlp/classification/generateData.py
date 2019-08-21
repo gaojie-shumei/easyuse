@@ -15,7 +15,7 @@ class GammaWord2VecDataProcessor(baseDataProcessor.BaseDataProcessor):
                      "length": baseDataProcessor.FeatureTypingFunctions.int64_feature}
             y_fns = {"y": baseDataProcessor.FeatureTypingFunctions.int64_feature}
             name_to_features = {
-                "x": tf.FixedLenFeature(shape=[max_len * word2vec_size], dtype="float"),
+                "x": tf.FixedLenFeature(shape=[max_len * word2vec_size, ], dtype="float"),
                 "length": tf.FixedLenFeature(shape=[], dtype=tf.int64),
                 "is_real_sample": tf.FixedLenFeature(shape=[], dtype=tf.int64),
                 "y": tf.FixedLenFeature(shape=[], dtype=tf.int64)

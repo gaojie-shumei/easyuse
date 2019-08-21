@@ -99,7 +99,7 @@ with tf.device("/cpu:0"):
     model = creat_model()
 
 
-def get_max_len(train_data, test_data):
+def get_max_len(train_data, test_data, limit_len=512):
     max_len = 0
     for t_data in train_data:
         if max_len < len(t_data):
@@ -107,24 +107,27 @@ def get_max_len(train_data, test_data):
     for t_data in test_data:
         if max_len < len(t_data):
             max_len = len(t_data)
+    if max_len > limit_len:
+        max_len = limit_len
     return max_len
 
 
-def tf_record(all_data, all_label, processor, datautil, batch_size, wrapper, max_len):
-    start = 0
-    while start < len(all_data):
-        if start + batch_size < len(all_data):
-            samples = processor.creat_samples(all_data[start:start + batch_size], all_label[start:start + batch_size],
-                                              datautil, max_len)
-            features = processor.samples2features(samples)
-            wrapper.write(features, batch_size, len(all_data), is_complete=False)
-        else:
-            samples = processor.creat_samples(all_data[start:], all_label[start:],
-                                              datautil, max_len)
-            features = processor.samples2features(samples)
-            wrapper.write(features, batch_size, len(all_data), is_complete=True)
-        start += batch_size
-    _, iter_data, init = wrapper.read(False, batch_size)
+def tf_record(all_data, all_label, processor, datautil, batch_size, wrapper, max_len, is_train, need_write=False):
+    if need_write:
+        start = 0
+        while start < len(all_data):
+            if start + batch_size < len(all_data):
+                samples = processor.creat_samples(all_data[start:start + batch_size], all_label[start:start + batch_size],
+                                                  datautil, max_len)
+                features = processor.samples2features(samples)
+                wrapper.write(features, batch_size, len(all_data), is_complete=False)
+            else:
+                samples = processor.creat_samples(all_data[start:], all_label[start:],
+                                                  datautil, max_len)
+                features = processor.samples2features(samples)
+                wrapper.write(features, batch_size, len(all_data), is_complete=True)
+            start += batch_size
+    _, iter_data, init = wrapper.read(is_train, batch_size)
     return iter_data, init
 
 
@@ -133,13 +136,13 @@ def train(train_data, train_label, test_data, test_label, datautil: nlpDataUtil.
         max_len = get_max_len(train_data, test_data)
         processor = GammaWord2VecDataProcessor(max_len, word2vec_size)
         test_wrapper = dataWrapper.TFRecordWrapper("D:/test.tfRecord",
-                                                   processor.features_typing_fn)
+                                                   processor.features_typing_fn, need_write=False)
         train_wrapper = dataWrapper.TFRecordWrapper("D:/train.tfRecord",
-                                                    processor.features_typing_fn)
+                                                    processor.features_typing_fn, need_write=False)
         test_iter_data, test_init = tf_record(test_data, test_label, processor, datautil, batch_size, test_wrapper,
-                                              max_len)
+                                              max_len, False, True)
         train_iter_data, train_init = tf_record(train_data, train_label, processor, datautil, batch_size,
-                                                train_wrapper, max_len)
+                                                train_wrapper, max_len, True, True)
         # test_x,_,test_lengths = datautil.padding(test_data)
         # test_x,_ = datautil.format(test_x)
         # test_y = test_label
@@ -204,7 +207,7 @@ def main():
         test_data.append(text.split((" ")))
     datautil.word2vec(train_data + test_data, size=word2vec_size, min_count=1, sg=1)
     train(train_data, train_label, test_data, test_label,datautil,
-          train_num=100, batch_size=64)
+          train_num=100, batch_size=8)
 
 
 if __name__ == '__main__':
