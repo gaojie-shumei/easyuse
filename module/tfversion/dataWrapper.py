@@ -1,6 +1,5 @@
 import tensorflow as tf
 from typing import List, Union, Dict
-import os.path as ospath
 import collections
 import numpy as np
 import os
@@ -52,17 +51,35 @@ class FeatureTypingFunctions:
 
     @classmethod
     def int64_feature(cls, values):
-        f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
+        data = []
+        if isinstance(values[0], list):
+            for value in values:
+                data += value
+        else:
+            data = values
+        f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(data)))
         return f
 
     @classmethod
     def float_feature(cls, values):
-        f = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
+        data = []
+        if isinstance(values[0], list):
+            for value in values:
+                data += value
+        else:
+            data = values
+        f = tf.train.Feature(float_list=tf.train.FloatList(value=list(data)))
         return f
 
     @classmethod
     def bytes_feature(cls, values):
-        f = tf.train.Feature(bytes_list=tf.train.BytesList(value=list(values)))
+        data = []
+        if isinstance(values[0], list):
+            for value in values:
+                data += value
+        else:
+            data = values
+        f = tf.train.Feature(bytes_list=tf.train.BytesList(value=list(data)))
         return f
 
 
@@ -192,7 +209,6 @@ class TFDataWrapper:
         return tf_data, data, iterator_init
 
 
-
 class TFRecordWrapper:
     def __init__(self, file_path: str, feature_typing_fn: FeatureTypingFunctions):
         '''
@@ -202,42 +218,55 @@ class TFRecordWrapper:
         if file_path is None or file_path == "":
             raise ValueError("the file_path should provide")
         else:
-            file_list = file_path.rsplit("/",maxsplit=1)
-            if len(file_list)==1:
-                file_list = file_path.rsplit("\\",maxsplit=1)
-                if len(file_list)==1:
-                    self.file_path = file_path
-                else:
-                    if ospath.isdir(file_list[0]):
-                        self.file_path = file_path
-                    else:
-                        raise ValueError("the file_path not correct")
-            else:
-                if ospath.isdir(file_list[0]):
-                    self.file_path = file_path
-                else:
-                    raise ValueError("the file_path not correct")
+            self.file_path = file_path
         if feature_typing_fn is None:
             raise ValueError("feature_typing_fn should provide")
         self.feature_typing_fn = feature_typing_fn
-        self.writer = tf.io.TFRecordWriter(self.file_path)
+        try:
+            self.writer = tf.io.TFRecordWriter(self.file_path)
+        except:
+            self.writer = tf.python_io.TFRecordWriter(self.file_path)
 
     def __feature2dict(self, f):
         features = collections.OrderedDict()
         for x_key in f.net_x:
             if isinstance(f.net_x[x_key], list):
-                features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key])
+                try:
+                    features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key])
+                except TypeError as e:
+                    print(x_key, f.net_x[x_key])
+                    raise TypeError(str(e))
             elif isinstance(f.net_x[x_key], np.ndarray):
-                features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key].tolist())
+                try:
+                    features[x_key] = self.feature_typing_fn.x_fns[x_key](f.net_x[x_key].tolist())
+                except TypeError as e:
+                    print(x_key, f.net_x[x_key])
+                    raise TypeError(str(e))
             else:
-                features[x_key] = self.feature_typing_fn.x_fns[x_key]([f.net_x[x_key]])
+                try:
+                    features[x_key] = self.feature_typing_fn.x_fns[x_key]([f.net_x[x_key]])
+                except TypeError as e:
+                    print(x_key, f.net_x[x_key])
+                    raise TypeError(str(e))
         for y_key in f.net_y:
             if isinstance(f.net_y[y_key], list):
-                features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key])
+                try:
+                    features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key])
+                except TypeError as e:
+                    print(y_key, f.net_y[y_key])
+                    raise TypeError(str(e))
             elif isinstance(f.net_y[y_key], np.ndarray):
-                features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key].tolist())
+                try:
+                    features[y_key] = self.feature_typing_fn.y_fns[y_key](f.net_y[y_key].tolist())
+                except TypeError as e:
+                    print(y_key, f.net_y[y_key])
+                    raise TypeError(str(e))
             else:
-                features[y_key] = self.feature_typing_fn.y_fns[y_key]([f.net_y[y_key]])
+                try:
+                    features[y_key] = self.feature_typing_fn.y_fns[y_key]([f.net_y[y_key]])
+                except TypeError as e:
+                    print(y_key, f.net_y[y_key])
+                    raise TypeError(str(e))
         features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn([f.is_real_sample])
         return features
 
@@ -254,7 +283,10 @@ class TFRecordWrapper:
         if num_parallel_calls is not None and num_parallel_calls > 0:
             batch_size = batch_size * num_parallel_calls
         if self.writer is None:
-            writer = tf.io.TFRecordWriter(self.file_path)
+            try:
+                writer = tf.io.TFRecordWriter(self.file_path)
+            except:
+                writer = tf.python_io.TFRecordWriter(self.file_path)
             self.writer = writer
         else:
             writer = self.writer

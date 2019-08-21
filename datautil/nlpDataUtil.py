@@ -42,7 +42,8 @@ class NLPDataUtil:
         data_x: 通常是二维数组
         data_y: None 或者 跟data_x的维度一致 
     '''
-    def next_batch(self,batch_size,data_x:list,data_y:list=None,position=0,shuffle=True,random_state=random.randint(0,1000)):
+    def next_batch(self, batch_size, data_x: list, data_y: list=None, position=0, shuffle=True,
+                   random_state=random.randint(0, 1000)):
         temp_data_x = data_x[position:]
         if data_y is not None:
             temp_data_y = data_y[position:]
@@ -69,10 +70,11 @@ class NLPDataUtil:
                 batch_y = None
         position += batch_size
         return data_x,data_y,batch_x,batch_y,position
+
     '''
     batch_data :二维数组  str
     '''
-    def padding(self,batch_data:list,batch_y_data:list=None):
+    def padding(self, batch_data: list, batch_y_data: list=None, max_length=None):
         pad_word = self.pad_word
         max_len = 0
         actual_lengths = []
@@ -82,16 +84,24 @@ class NLPDataUtil:
             actual_lengths.append(len(batch_data[i]))
         pad_data = batch_data
         pad_y_data = batch_y_data
+        if max_length is not None:
+            max_len = max_length
         for i in range(len(pad_data)):
-            pad_data[i] = pad_data[i] + [pad_word]*(max_len-len(batch_data[i]))
-            if batch_y_data is not None:
-                pad_y_data[i] = pad_y_data[i] + [pad_word]*(max_len-len(batch_y_data[i]))
-#             print(len(pad_data[i]),len(pad_y_data[i]))
+            if len(batch_data[i]) <= max_len:
+                pad_data[i] = pad_data[i] + [pad_word]*(max_len-len(batch_data[i]))
+                if batch_y_data is not None:
+                    pad_y_data[i] = pad_y_data[i] + [pad_word]*(max_len-len(batch_y_data[i]))
+            else:
+                pad_data[i] = pad_data[i][0:max_len]
+                if batch_y_data is not None:
+                    pad_y_data[i] = pad_y_data[i][0:max_len]
+                actual_lengths[i] = max_len
+    #             print(len(pad_data[i]),len(pad_y_data[i]))
         actual_lengths = np.array(actual_lengths)
         return pad_data, pad_y_data, actual_lengths
     
-    def ner_bert_data_convert(self,batch_data:list,tokenizer:tokenization.FullTokenizer,
-                              batch_label:list=None):
+    def ner_bert_data_convert(self, batch_data: list, tokenizer: tokenization.FullTokenizer,
+                              batch_label: list=None):
         '''
         :batch_data: a two dim list,if English,then the data is splited by space,
                      if Chinese,the list is a char list
@@ -226,7 +236,7 @@ class NLPDataUtil:
                 batch_x.append(np.array(x))
                 if batch_y is not None:
                     batch_y.append(np.array(y))
-            batch_x = np.array(batch_x)
+            batch_x = np.array(batch_x).astype(np.float32)
             if batch_y is not None:
                 batch_y = np.array(batch_y).astype(np.int32)
         return batch_x,batch_y

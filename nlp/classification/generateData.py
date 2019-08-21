@@ -3,7 +3,41 @@ import pandas as pd
 import numpy as np
 import random
 import math
+from module.tfversion import baseDataProcessor
+import datautil.nlpDataUtil as nlpDataUtil
+import tensorflow as tf
 
+
+class GammaWord2VecDataProcessor(baseDataProcessor.BaseDataProcessor):
+    def __init__(self, max_len, word2vec_size=768, features_typing_fn=None):
+        if features_typing_fn is None:
+            x_fns = {"x": baseDataProcessor.FeatureTypingFunctions.float_feature,
+                     "length": baseDataProcessor.FeatureTypingFunctions.int64_feature}
+            y_fns = {"y": baseDataProcessor.FeatureTypingFunctions.int64_feature}
+            name_to_features = {
+                "x": tf.FixedLenFeature(shape=[max_len * word2vec_size], dtype="float"),
+                "length": tf.FixedLenFeature(shape=[], dtype=tf.int64),
+                "is_real_sample": tf.FixedLenFeature(shape=[], dtype=tf.int64),
+                "y": tf.FixedLenFeature(shape=[], dtype=tf.int64)
+            }
+            features_typing_fn = baseDataProcessor.FeatureTypingFunctions(x_fns, name_to_features, y_fns)
+        super(GammaWord2VecDataProcessor, self).__init__(features_typing_fn)
+
+    def creat_samples(self, data, label, datautil: nlpDataUtil.NLPDataUtil, max_length):
+        xs, _, lengths = datautil.padding(data, max_length=max_length)
+        xs, _ = datautil.format(xs)
+        samples = []
+        for index, (x, length, y) in enumerate(zip(xs, lengths, label)):
+            sample = baseDataProcessor.InputSample(index, {"x": x, "length": length},{"y": y})
+            samples.append(sample)
+        return samples
+
+    def samples2features(self, samples: baseDataProcessor.List[baseDataProcessor.InputSample]):
+        features = []
+        for sample in samples:
+            feature = baseDataProcessor.InputFeatures(sample.input_x, sample.input_y, True)
+            features.append(feature)
+        return features
 
 def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap", data_augmentation_label=2,
                              test_percent=0.5, keyword_path="../data/keyword.xlsx"):
@@ -55,9 +89,9 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
     '''数据打乱'''
     np.random.shuffle(data)
     test_text = test_data[:, 1].tolist()
-    test_label = test_data[:, 2].tolist()
+    test_label = test_data[:, 2].astype(np.int32).tolist()
     train_text = data[:, 1].tolist()
-    train_label = data[:, 2].tolist()
+    train_label = data[:, 2].astype(np.int32).tolist()
     return train_text, train_label, test_text, test_label
 
 

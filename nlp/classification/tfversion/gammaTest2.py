@@ -5,7 +5,7 @@ import tensorflow.contrib as tfc
 import os
 import json
 import datetime
-from module.tfversion import baseNet,modelModule
+from module.tfversion import baseNet,modelModule, dataWrapper
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  #只显示error
 
 
@@ -99,28 +99,67 @@ with tf.device("/cpu:0"):
     model = creat_model()
 
 
-def train(train_data,train_label,test_data,test_label,datautil: nlpDataUtil.NLPDataUtil,train_num,batch_size):
+def get_max_len(train_data, test_data):
+    max_len = 0
+    for t_data in train_data:
+        if max_len < len(t_data):
+            max_len = len(t_data)
+    for t_data in test_data:
+        if max_len < len(t_data):
+            max_len = len(t_data)
+    return max_len
+
+
+def tf_record(all_data, all_label, processor, datautil, batch_size, wrapper, max_len):
+    start = 0
+    while start < len(all_data):
+        if start + batch_size < len(all_data):
+            samples = processor.creat_samples(all_data[start:start + batch_size], all_label[start:start + batch_size],
+                                              datautil, max_len)
+            features = processor.samples2features(samples)
+            wrapper.write(features, batch_size, len(all_data), is_complete=False)
+        else:
+            samples = processor.creat_samples(all_data[start:], all_label[start:],
+                                              datautil, max_len)
+            features = processor.samples2features(samples)
+            wrapper.write(features, batch_size, len(all_data), is_complete=True)
+        start += batch_size
+    _, iter_data, init = wrapper.read(False, batch_size)
+    return iter_data, init
+
+
+def train(train_data, train_label, test_data, test_label, datautil: nlpDataUtil.NLPDataUtil, train_num, batch_size):
     with tf.device("/cpu:0"):
-        test_x,_,test_lengths = datautil.padding(test_data)
-        test_x,_ = datautil.format(test_x)
-        test_y = test_label
-        v_inputs_feed = [test_x, test_lengths]
-        v_outputs_feed = test_y
+        max_len = get_max_len(train_data, test_data)
+        processor = GammaWord2VecDataProcessor(max_len, word2vec_size)
+        test_wrapper = dataWrapper.TFRecordWrapper("D:/test.tfRecord",
+                                                   processor.features_typing_fn)
+        train_wrapper = dataWrapper.TFRecordWrapper("D:/train.tfRecord",
+                                                    processor.features_typing_fn)
+        test_iter_data, test_init = tf_record(test_data, test_label, processor, datautil, batch_size, test_wrapper,
+                                              max_len)
+        train_iter_data, train_init = tf_record(train_data, train_label, processor, datautil, batch_size,
+                                                train_wrapper, max_len)
+        # test_x,_,test_lengths = datautil.padding(test_data)
+        # test_x,_ = datautil.format(test_x)
+        # test_y = test_label
+        test_x =tf.reshape(test_iter_data["x"], shape=[-1, max_len, word2vec_size])
+        v_inputs_feed = [test_x, test_iter_data["length"]]
+        v_outputs_feed = test_iter_data["y"]
         v_net_configs_feed = 0
         init = tf.global_variables_initializer()
         config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.8),
                                 allow_soft_placement=True)
         with tf.Session(config=config) as sess:
             sess.run(init)
-            pad_x, _, actual_lengths = datautil.padding(train_data)
-            train_x, _ = datautil.format(pad_x)
-            tr_inputs_feed = [train_x, actual_lengths]
-            tr_outputs_feed = train_label
+            train_x = tf.reshape(train_iter_data["x"], shape=[-1, max_len, word2vec_size])
+            tr_inputs_feed = [train_x, train_iter_data["length"]]
+            tr_outputs_feed = train_iter_data["y"]
             tr_net_configs_feed = 1
             results = model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                               v_outputs_feed, v_net_configs_feed, batch_size, True, True, start_save_model_epoch=10,
-                               model_name=model_name)
-            with open("info.txt",mode="a+",encoding="utf-8") as f:
+                                v_outputs_feed, v_net_configs_feed, batch_size, True, True, start_save_model_epoch=10,
+                                model_name=model_name, tr_tf_dataset_init=train_init, v_tf_dataset_init=test_init)
+            with open("info.txt", mode="a+", encoding="utf-8") as f:
                 for result in results:
                     f.write(json.dumps(result)+"\n")
             # for i in range(train_num):
