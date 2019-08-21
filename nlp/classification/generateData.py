@@ -86,6 +86,8 @@ def read_classification_data(jsonPath, depreated_text="DirtyDeedsDoneDirtCheap",
         data = np.r_[other_data[sample_index], data_augmentation_data]
     else:
         data = np.r_[other_data, data_augmentation_data[0:other_data.shape[0]]]
+    if data.shape[0] > 25600:
+        data = data[-25600:]
     '''数据打乱'''
     np.random.shuffle(data)
     test_text = test_data[:, 1].tolist()
