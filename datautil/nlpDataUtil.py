@@ -74,7 +74,7 @@ class NLPDataUtil:
     '''
     batch_data :二维数组  str
     '''
-    def padding(self, batch_data: list, batch_y_data: list=None, max_length=None):
+    def padding(self, batch_data: list, batch_y_data: list=None, max_length=None, limit_len=512):
         pad_word = self.pad_word
         max_len = 0
         actual_lengths = []
@@ -86,6 +86,8 @@ class NLPDataUtil:
         pad_y_data = batch_y_data
         if max_length is not None:
             max_len = max_length
+        if max_len > limit_len:
+            max_len = limit_len
         for i in range(len(pad_data)):
             if len(batch_data[i]) <= max_len:
                 pad_data[i] = pad_data[i] + [pad_word]*(max_len-len(batch_data[i]))
