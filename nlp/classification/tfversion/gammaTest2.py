@@ -140,9 +140,9 @@ def train(train_data, train_label, test_data, test_label, datautil: nlpDataUtil.
         train_wrapper = dataWrapper.TFRecordWrapper("D:/train.tfRecord",
                                                     processor.features_typing_fn, need_write=False)
         test_iter_data, test_init = tf_record(test_data, test_label, processor, datautil, batch_size, test_wrapper,
-                                              max_len, False, True)
+                                              max_len, False, False)
         train_iter_data, train_init = tf_record(train_data, train_label, processor, datautil, batch_size,
-                                                train_wrapper, max_len, True, True)
+                                                train_wrapper, max_len, True, False)
         # test_x,_,test_lengths = datautil.padding(test_data)
         # test_x,_ = datautil.format(test_x)
         # test_y = test_label
@@ -160,7 +160,7 @@ def train(train_data, train_label, test_data, test_label, datautil: nlpDataUtil.
             tr_outputs_feed = train_iter_data["y"]
             tr_net_configs_feed = 1
             results = model.fit(sess, train_num, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed, v_inputs_feed,
-                                v_outputs_feed, v_net_configs_feed, batch_size, True, True, start_save_model_epoch=10,
+                                v_outputs_feed, v_net_configs_feed, batch_size, False, True, start_save_model_epoch=10,
                                 model_name=model_name, tr_tf_dataset_init=train_init, v_tf_dataset_init=test_init)
             with open("info.txt", mode="a+", encoding="utf-8") as f:
                 for result in results:
@@ -207,7 +207,7 @@ def main():
         test_data.append(text.split((" ")))
     datautil.word2vec(train_data + test_data, size=word2vec_size, min_count=1, sg=1)
     train(train_data, train_label, test_data, test_label,datautil,
-          train_num=100, batch_size=8)
+          train_num=100, batch_size=32)
 
 
 if __name__ == '__main__':

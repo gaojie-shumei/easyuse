@@ -5,6 +5,7 @@ import numpy as np
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+
 class InputSample:
     def __init__(self, guid, input_x: Dict, input_y: Dict=None):
         '''
@@ -51,34 +52,19 @@ class FeatureTypingFunctions:
 
     @classmethod
     def int64_feature(cls, values):
-        data = []
-        if isinstance(values[0], list):
-            for value in values:
-                data += value
-        else:
-            data = values
+        data = np.array(values).reshape(-1).tolist()
         f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(data)))
         return f
 
     @classmethod
     def float_feature(cls, values):
-        data = []
-        if isinstance(values[0], list):
-            for value in values:
-                data += value
-        else:
-            data = values
+        data = np.array(values).reshape(-1).tolist()
         f = tf.train.Feature(float_list=tf.train.FloatList(value=list(data)))
         return f
 
     @classmethod
     def bytes_feature(cls, values):
-        data = []
-        if isinstance(values[0], list):
-            for value in values:
-                data += value
-        else:
-            data = values
+        data = np.array(values).reshape(-1).tolist()
         f = tf.train.Feature(bytes_list=tf.train.BytesList(value=list(data)))
         return f
 
@@ -194,7 +180,7 @@ class TFDataWrapper:
         return tf_data, data, iterator_init
 
     def __call__(self, all_features: List[InputFeatures], batch_size, is_train=True,
-                drop_remainder=False, num_parallel_calls=None):
+                 drop_remainder=False, num_parallel_calls=None):
         '''
         :param all_features: the all data for network
         :param batch_size: batch size
@@ -227,6 +213,7 @@ class TFRecordWrapper:
                 self.writer = tf.io.TFRecordWriter(self.file_path)
             except:
                 self.writer = tf.python_io.TFRecordWriter(self.file_path)
+        self.need_write = need_write
 
     def __feature2dict(self, f):
         features = collections.OrderedDict()
@@ -271,16 +258,20 @@ class TFRecordWrapper:
         features["is_real_sample"] = self.feature_typing_fn.is_real_sample_fn([f.is_real_sample])
         return features
 
-    def write(self, input_features: Union[InputFeatures, List[InputFeatures]], batch_size, num_of_data=0,
+    def write(self, input_features: Union[InputFeatures, List[InputFeatures]], batch_size, num_of_data,
               is_complete=True, num_parallel_calls=None):
         '''
         :param input_features: the sample(InputFeatures) list or one for to write to TFRecord
         :param batch_size: batch size
-        :param num_of_data: the write data num
+        :param num_of_data: the need write data num
         :param is_complete:  TFRecord is complete
         :param num_parallel_calls: the parallel nums, if None, one thread
         :return:
         '''
+        if self.need_write:
+            pass
+        else:
+            return num_of_data
         if num_parallel_calls is not None and num_parallel_calls > 0:
             batch_size = batch_size * num_parallel_calls
         if self.writer is None:

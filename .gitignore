@@ -6,3 +6,4 @@ base_model
 model
 *.tfRecord
 *.tf_record
+*.txt
