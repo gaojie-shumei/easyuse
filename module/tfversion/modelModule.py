@@ -13,7 +13,7 @@ class ModelModule:
     def __init__(self, inputs: Union[tf.Tensor, List[tf.Tensor]], outputs: Union[tf.Tensor, List[tf.Tensor]],
                  standard_outputs: Union[tf.Tensor, List[tf.Tensor]], loss: tf.Tensor, train_ops: tf.Tensor,
                  net_configs: Union[tf.Tensor, List[tf.Tensor]] = None, model_save_path: str = None,
-                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, num_parallel_calls=0):
+                 metrics: Union[tf.Tensor, List[tf.Tensor]] = None, num_parallel_calls=0, max_save=1):
         '''
         :param inputs:  the model inputs, a tensor or tensor list
         :param outputs:  the model outputs, a tensor or tensor list, usually call it predict
@@ -24,6 +24,8 @@ class ModelModule:
         :param model_save_path: the model path for save model
         :param metrics:  the model metrics, like accuracy, MSE and so on
         :param num_parallel_calls: data parallel num, usually use multi GPU
+        :param max_save: the model save max num,
+                         if the train_ops is not use global_step, the max_save parm not work, only one save
         '''
         self._inputs = inputs
         self._outputs = outputs
@@ -34,7 +36,12 @@ class ModelModule:
         self._model_save_path = model_save_path
         self._train_ops = train_ops
         self._num_parallel_calls = num_parallel_calls
-        self._global_step = None
+        self._global_step = tf.train.get_or_create_global_step()
+        self._saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_save)
+
+    @property
+    def saver(self):
+        return self._saver
 
     @property
     def num_parallel_calls(self):
@@ -75,13 +82,9 @@ class ModelModule:
     @property
     def global_step(self):
         return self._global_step
-    
-    @global_step.setter
-    def global_step(self, val):
-        self._global_step = val
 
     @staticmethod
-    def get_assignment_map_from_checkpoint(vars, init_checkpoint):
+    def __get_assignment_map_from_checkpoint(vars, init_checkpoint):
         """Compute the union of the current variables and checkpoint variables."""
         assignment_map = {}
         initialized_variable_names = {}
@@ -108,8 +111,13 @@ class ModelModule:
         return (assignment_map, initialized_variable_names)
 
     def restore(self, model_path):
+        '''
+        :param model_path: the model save path, it is better to provide the model file
+                           than to provide checkpoint
+        :return:
+        '''
         vars = tf.global_variables()
-        assignment_map, _ = self.get_assignment_map_from_checkpoint(vars, model_path)
+        assignment_map, _ = self.__get_assignment_map_from_checkpoint(vars, model_path)
         tf.train.init_from_checkpoint(model_path, assignment_map)
 
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
@@ -141,6 +149,11 @@ class ModelModule:
         '''
         results = []
         one_epoch_num = 0
+        try:
+            sess.run(self.global_step)
+        except:
+            print("the graph not init, init it now")
+            sess.run(tf.global_variables_initializer())
         if tr_tf_dataset_init is not None:
             sess.run(tr_tf_dataset_init)
             while True:
@@ -151,12 +164,9 @@ class ModelModule:
                     break
         if self.model_save_path is not None and os_path.exists(self.model_save_path):
             if tf.train.latest_checkpoint(self.model_save_path) is not None and restore:
-                saver = tf.train.Saver(tf.global_variables())
-                saver.restore(sess, self.model_save_path)
+                self.saver.restore(sess, self.model_save_path)
         for i in range(epoch):
             save_model = False
-            if start_save_model_epoch is not None and i >= start_save_model_epoch:
-                save_model = True
             if tr_tf_dataset_init is not None:
                 sess.run(tr_tf_dataset_init)
                 step = 0
@@ -166,11 +176,14 @@ class ModelModule:
                         step += 1
                         if step == one_epoch_num:
                             is_one_epoch = True
+                            if start_save_model_epoch is not None and i >= start_save_model_epoch:
+                                save_model = True
                         else:
                             is_one_epoch = False
                         result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed,
                                                 v_inputs_feed, v_outputs_feed, v_net_configs_feed, batch_size,
-                                                return_outputs, is_one_epoch, save_model, model_name, v_tf_dataset_init)
+                                                return_outputs, is_one_epoch, save_model, model_name, v_tf_dataset_init,
+                                                restore)
                         if is_one_epoch:
                             results.append(result)
                             if show_result:
@@ -180,6 +193,9 @@ class ModelModule:
             else:
                 generator = self.__generator_batch(batch_size, tr_inputs_feed, tr_outputs_feed, shuffle=True)
                 for batch_inputs_feed, batch_outputs_feed, batch_len, is_one_epoch in generator:
+                    if is_one_epoch:
+                        if start_save_model_epoch is not None and i >= start_save_model_epoch:
+                            save_model = True
                     result = self.batch_fit(sess, batch_inputs_feed, batch_outputs_feed, tr_net_configs_feed,
                                             v_inputs_feed,v_outputs_feed, v_net_configs_feed, batch_size,
                                             return_outputs, is_one_epoch, save_model, model_name, v_tf_dataset_init)
@@ -192,7 +208,7 @@ class ModelModule:
     def batch_fit(self, sess: tf.Session, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
                   v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,
                   return_outputs=False, do_validation=False, save_model=False, model_name='model',
-                  v_tf_dataset_init=None):
+                  v_tf_dataset_init=None, restore=True):
         '''
 
         :param sess:  a tf.Session for train
@@ -213,10 +229,15 @@ class ModelModule:
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
             the validation if exist and do_validation is True   'v_loss','v_metrics','v_outputs'
         '''
+        try:
+            sess.run(self.global_step)
+        except:
+            print("the graph not init, init it now")
+            sess.run(tf.global_variables_initializer())
+            if self.model_save_path is not None and os_path.exists(self.model_save_path):
+                if tf.train.latest_checkpoint(self.model_save_path) is not None and restore:
+                    self.saver.restore(sess, self.model_save_path)
         result = {}
-        if self.global_step is None:
-            self.global_step = tf.train.get_or_create_global_step()
-            sess.run(tf.variables_initializer([self.global_step]))
         feed = self.__feed(tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed)
         sess.run(self.train_ops, feed_dict=feed)
         if self.metrics is not None:
@@ -305,12 +326,12 @@ class ModelModule:
             if return_outputs:
                 result["v_outputs"] = v_outputs
         if save_model and self.model_save_path is not None:
-            saver = tf.train.Saver(tf.global_variables())
             if os_path.exists(self.model_save_path):
                 pass
             else:
                 os.makedirs(self.model_save_path)
-            saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"), global_step=self.global_step)
+            self.saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"),
+                            global_step=self.global_step)
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,

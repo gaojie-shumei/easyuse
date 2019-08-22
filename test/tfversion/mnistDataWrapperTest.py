@@ -14,9 +14,9 @@ def read_mnist_data(path):
     return (x_train, y_train), (x_test, y_test)
 
 
-x = tf.placeholder("float",shape=[None,784],name="x")
+x = tf.placeholder("float",shape=[None, 784], name="x")
 is_real_sample = tf.placeholder(tf.int32, shape=[None], name="is_real_sample")
-y = tf.placeholder(tf.int32,shape=[None],name="y")
+y = tf.placeholder(tf.int32, shape=[None], name="y")
 
 
 def mnist_model():
@@ -26,11 +26,11 @@ def mnist_model():
 
 
 out = mnist_model()
-loss = tf.losses.sparse_softmax_cross_entropy(y[tf.equal(is_real_sample, tf.constant(1))],
-                                              out[tf.equal(is_real_sample, tf.constant(1))])
-acc = tf.reduce_mean(tf.cast(tf.equal(y[tf.equal(is_real_sample, tf.constant(1))],
-                                      tf.argmax(out[tf.equal(is_real_sample, tf.constant(1))],
-                                                axis=-1,output_type=tf.int32)),"float"))
+tf_index = tf.cast(is_real_sample, "float")
+loss = tf.losses.sparse_softmax_cross_entropy(y, out, reduction=tf.losses.Reduction.NONE)
+loss = tf.reduce_sum(tf.multiply(tf_index, loss)) / tf.reduce_sum(tf_index)
+acc = tf.cast(tf.equal(y, tf.argmax(out, axis=-1, output_type=tf.int32)), "float")
+acc = tf.reduce_sum(tf.multiply(tf_index, acc)) / tf.reduce_sum(tf_index)
 
 
 def train(x_train,y_train,x_test,y_test,train_num,learning_rate,batch_size):
@@ -44,26 +44,28 @@ def train(x_train,y_train,x_test,y_test,train_num,learning_rate,batch_size):
     #                                     num_parallel_calls=0)
     # _, test_data, test_init = wrapper(test_features, batch_size, is_train=False, drop_remainder=False,
     #                                   num_parallel_calls=0)
-    wrapper = TFRecordWrapper("train.tf_record",mnist_data_processor.features_typing_fn)
-    wrapper1 = TFRecordWrapper("test.tf_record", mnist_data_processor.features_typing_fn)
-    wrapper.write(train_features, batch_size, 0)
-    wrapper1.write(test_features, batch_size, 0)
+    wrapper = TFRecordWrapper("train.tf_record",mnist_data_processor.features_typing_fn, False)
+    wrapper1 = TFRecordWrapper("test.tf_record", mnist_data_processor.features_typing_fn, False)
+    wrapper.write(train_features, batch_size, len(train_features))
+    wrapper1.write(test_features, batch_size, len(test_features))
     _, train_data, train_init = wrapper.read(True, batch_size)
     _, test_data, test_init = wrapper1.read(False, batch_size)
+    global_step = tf.train.get_or_create_global_step()
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-        train_ops = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+        train_ops = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
     init = tf.global_variables_initializer()
-    model = modelModule.ModelModule([x, is_real_sample], out, y, loss, train_ops, None, "", acc, 0)
+    model = modelModule.ModelModule([x, is_real_sample], out, y, loss, train_ops, None,
+                                    "../model/mnistWrapper", acc, 0)
     with tf.Session() as sess:
         sess.run(init)
         model.fit(sess, train_num, [train_data["x"], train_data["is_real_sample"]], train_data["y"], None,
                   [test_data["x"], test_data["is_real_sample"]], test_data["y"],None, batch_size, False, True,
-                  10, "model", train_init, test_init)
-        result = model.evaluation(sess, [test_data["x"], test_data["is_real_sample"]], test_data["y"], None, batch_size, True,
-                                  False, test_init)
+                  10, "model", train_init, test_init, True)
+        result = model.evaluation(sess, [test_data["x"], test_data["is_real_sample"]], test_data["y"], None,
+                                  batch_size, True, False, test_init)
         print(result)
-        result = model.predict(sess, [test_data["x"], test_data["is_real_sample"]],None, batch_size, True,test_init)
-        result["predict"] = np.argmax(result["predict"],axis=-1)
+        result = model.predict(sess, [test_data["x"], test_data["is_real_sample"]], None, batch_size, True, test_init)
+        result["predict"] = np.argmax(result["predict"], axis=-1)
         print("predict=", result["predict"][0:20])
         print("      y=", y_test[0:20])
         # j = 0
