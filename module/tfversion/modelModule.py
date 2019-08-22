@@ -34,6 +34,7 @@ class ModelModule:
         self._model_save_path = model_save_path
         self._train_ops = train_ops
         self._num_parallel_calls = num_parallel_calls
+        self._global_step = None
 
     @property
     def num_parallel_calls(self):
@@ -70,6 +71,14 @@ class ModelModule:
     @property
     def metrics(self):
         return self._metrics
+    
+    @property
+    def global_step(self):
+        return self._global_step
+    
+    @global_step.setter
+    def global_step(self, val):
+        self._global_step = val
 
     @staticmethod
     def get_assignment_map_from_checkpoint(vars, init_checkpoint):
@@ -106,7 +115,7 @@ class ModelModule:
     def fit(self, sess: tf.Session, epoch: int, tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed=None,
             v_inputs_feed=None, v_outputs_feed=None, v_net_configs_feed=None, batch_size=64,return_outputs=False,
             show_result=True, start_save_model_epoch=None, model_name='model', tr_tf_dataset_init=None,
-            v_tf_dataset_init=None):
+            v_tf_dataset_init=None, restore=True):
         '''
 
         :param sess:  a tf.Session for train
@@ -124,6 +133,7 @@ class ModelModule:
         :param model_name: model_name  'model' is the default
         :param tr_tf_dataset_init: if train data is tf.data.Dataset, this should provide
         :param v_tf_dataset_init: if validation data is tf.data.Dataset, this should provide
+        :param restore: if a model exist, restore it or not
         :return:
             a result with self.loss,self.metrics is not None ,self.metrics will append in result, if return_output
             is True,the output also in result, the keys will be 'tr_loss','tr_metrics','tr_outputs'
@@ -139,6 +149,10 @@ class ModelModule:
                     one_epoch_num += 1
                 except tf.errors.OutOfRangeError:
                     break
+        if self.model_save_path is not None and os_path.exists(self.model_save_path):
+            if tf.train.latest_checkpoint(self.model_save_path) is not None and restore:
+                saver = tf.train.Saver(tf.global_variables())
+                saver.restore(sess, self.model_save_path)
         for i in range(epoch):
             save_model = False
             if start_save_model_epoch is not None and i >= start_save_model_epoch:
@@ -200,7 +214,9 @@ class ModelModule:
             the validation if exist and do_validation is True   'v_loss','v_metrics','v_outputs'
         '''
         result = {}
-        global_step = tf.train.get_or_create_global_step()
+        if self.global_step is None:
+            self.global_step = tf.train.get_or_create_global_step()
+            sess.run(tf.variables_initializer([self.global_step]))
         feed = self.__feed(tr_inputs_feed, tr_outputs_feed, tr_net_configs_feed)
         sess.run(self.train_ops, feed_dict=feed)
         if self.metrics is not None:
@@ -290,7 +306,11 @@ class ModelModule:
                 result["v_outputs"] = v_outputs
         if save_model and self.model_save_path is not None:
             saver = tf.train.Saver(tf.global_variables())
-            saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"), global_step=global_step)
+            if os_path.exists(self.model_save_path):
+                pass
+            else:
+                os.makedirs(self.model_save_path)
+            saver.save(sess, os_path.join(self.model_save_path, model_name+".ckpt"), global_step=self.global_step)
         return result
 
     def evaluation(self, sess: tf.Session, test_inputs_feed, test_outputs_feed, test_net_configs_feed=None,
