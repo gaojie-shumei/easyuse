@@ -44,14 +44,14 @@ def train(x_train,y_train,x_test,y_test,train_num,learning_rate,batch_size):
             x_train, y_train, batch_x, batch_y, position = next_batch(x_train,y_train,position,batch_size)
             with tf.GradientTape() as tape:
                 out = model(tf.convert_to_tensor(batch_x))
-                loss = tf.reduce_mean(tf.losses.sparse_categorical_crossentropy(tf.convert_to_tensor(batch_y),out))
+                loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(tf.convert_to_tensor(batch_y),out))
                 accuracy = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(tf.convert_to_tensor(batch_y),out))
                 grad = tape.gradient(loss, sources=model.trainable_variables)
                 # grad = tf.clip_by_value(grad, clip_value_min=-5, clip_value_max=5,name="grad-clip")
                 optimizer.apply_gradients(zip(grad, model.trainable_variables))
             if step %100==0:
                 out1 = model(tf.convert_to_tensor(x_test))
-                t_loss = tf.reduce_mean(tf.losses.sparse_categorical_crossentropy(tf.convert_to_tensor(y_test),out1))
+                t_loss = tf.reduce_mean(tf.keras.losses.sparse_categorical_crossentropy(tf.convert_to_tensor(y_test),out1))
                 t_acc = tf.reduce_mean(tf.keras.metrics.sparse_categorical_accuracy(tf.convert_to_tensor(y_test),out1))
 
                 print("epochs=",i,",step=",step,",loss={:f}".format(loss),",acc={:f}".format(accuracy),
