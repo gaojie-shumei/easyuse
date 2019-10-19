@@ -4,6 +4,7 @@ import torch.nn as tcn
 import torch.nn.functional as F
 import torch.optim as tcoptim
 import numpy as np
+
 def next_batch(x_train,y_train,position,batch_size,shuffle=True,randomstate=np.random.randint(0,100)):
     temp_x,temp_y = x_train[position:],y_train[position:]
     if shuffle:
