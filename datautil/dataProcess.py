@@ -549,7 +549,7 @@ def JD_process(tag_file_list, classification_target_file, labeling_target_file, 
     jd_ner.to_json(labeling_target_file, "records", lines=True, force_ascii=False)
 
     labels = np.unique(jd_classification_data[:, 2])
-    classification_info_str = "labels:" + str(labels) + "\n" + "classification num:" + str(data.shape[0]) + "\n"
+    classification_info_str = "labels:" + str(labels) + "\n" + "classification num:" + str(jd_classification_data.shape[0]) + "\n"
     for lb in labels:
         percent = np.sum(jd_classification_data[:, 2] == lb) / jd_classification_data.shape[0]
         lb = int(lb)
@@ -574,31 +574,31 @@ def JD_process(tag_file_list, classification_target_file, labeling_target_file, 
 
 
 def main():
-    jd_base_dir = "D:/数据/jd_dataset/ch"
+    jd_base_dir = "F:/平安金融壹账通实习/数据处理/jd_dataset"
     tag_file_list = get_all_file(jd_base_dir, "labeling", "json", True)
     JD_process(tag_file_list, jd_base_dir+"/classification.json", jd_base_dir+"/ner.json",jd_base_dir+"/nerinfo.txt",
-               jd_base_dir+"/classificationinfo.txt",isCharSplit=True)
+               jd_base_dir+"/classificationinfo.txt",isCharSplit=False)
 
 
-    base_dir = "D:/数据/dataset"
-    readme_path_list = get_all_file(base_dir, "readme", "txt", True)
-    classfication_path_list = get_all_file(base_dir, "classification", "json", True)
-    labeling_path_list = get_all_file(base_dir, "labeling", "json", True)
-    info_list = onebyone(readme_path_list, classfication_path_list, labeling_path_list, split_pattern=" ")
-    info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
-    ## for  classification
-    all_data = classification_data_info_store(info_list, "D:/数据/数据处理结果/data/classification.json",
-                                              "D:/数据/数据处理结果/info/classificationinfo/classificationinfo0731.txt")
-    data = np.array(all_data)
-
-
-
-    ##for ner
-    all_ner_data, count_max_512 = ner_data_info_restore(info_list, "D:/数据/数据处理结果/data/ner.json",
-                                                        "D:/数据/数据处理结果/info/nerinfo/nerinfo0731.txt",
-                                                        isCharSplit=False)
-    print("ner text split with space or char and count_max_512=", count_max_512)
-    count_len_with_word("D:/数据/数据处理结果/data/classification.json", "D:/数据/数据处理结果/data/ner.json")
+#     base_dir = "D:/数据/dataset"
+#     readme_path_list = get_all_file(base_dir, "readme", "txt", True)
+#     classfication_path_list = get_all_file(base_dir, "classification", "json", True)
+#     labeling_path_list = get_all_file(base_dir, "labeling", "json", True)
+#     info_list = onebyone(readme_path_list, classfication_path_list, labeling_path_list, split_pattern=" ")
+#     info_list = extract_data(info_list, key_value_split_pattern=":", value_split_pattern=",")
+#     ## for  classification
+#     all_data = classification_data_info_store(info_list, "D:/数据/数据处理结果/data/classification.json",
+#                                               "D:/数据/数据处理结果/info/classificationinfo/classificationinfo0731.txt")
+#     data = np.array(all_data)
+# 
+# 
+# 
+#     ##for ner
+#     all_ner_data, count_max_512 = ner_data_info_restore(info_list, "D:/数据/数据处理结果/data/ner.json",
+#                                                         "D:/数据/数据处理结果/info/nerinfo/nerinfo0731.txt",
+#                                                         isCharSplit=False)
+#     print("ner text split with space or char and count_max_512=", count_max_512)
+#     count_len_with_word("D:/数据/数据处理结果/data/classification.json", "D:/数据/数据处理结果/data/ner.json")
 
 
 if __name__ == '__main__':
